@@ -1,5 +1,5 @@
 <h1 align="center">Deep Event Visual Odometry</h1>
-Fork Arthur
+Fork Arthur modified
 <p align="center">
     <a href="https://vision.in.tum.de/members/klenk">Simon Klenk</a><sup>1,2*</sup> &emsp;&emsp;
     <a href="https://motzet.github.io">Marvin Motzet</a><sup>1,2*</sup> &emsp;&emsp;
