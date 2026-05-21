@@ -6,12 +6,9 @@ import tqdm
 import glob
 import multiprocessing
 
-import rosbag
-from sensor_msgs.msg import Image
-from cv_bridge import CvBridge
 import tqdm as tqdm
 import h5py
-from utils.bag_utils import read_H_W_from_bag, read_tss_us_from_rosbag, read_images_from_rosbag, read_evs_from_rosbag, read_calib_from_bag, read_t0us_evs_from_rosbag, read_poses_from_rosbag
+from utils.bag_utils import BagReader, read_H_W_from_bag, read_tss_us_from_rosbag, read_images_from_rosbag, read_evs_from_rosbag, read_calib_from_bag, read_t0us_evs_from_rosbag, read_poses_from_rosbag
 
 def write_gt_stamped(poses, tss_us_gt, outfile):
     with open(outfile, 'w') as f:
@@ -62,7 +59,7 @@ def process_dirs(indirs, side="left", DELTA_MS=None):
         print(f"\n\n RPG: Undistorting {seq} evs & rgb")
 
         inbag = os.path.join(indir, f"../{seq}.bag")
-        bag = rosbag.Bag(inbag, "r")
+        bag = BagReader(inbag)
         topics = list(bag.get_type_and_topic_info()[1].keys())
         topics = sorted([t for t in topics if "events" in t or "image" in t])
         assert topics == sorted(['/davis_left/events', '/davis_left/image_raw', '/davis_right/events', '/davis_right/image_raw']) or topics == sorted(['/davis/left/events', '/davis/left/image_raw', '/davis/right/events', '/davis/right/image_raw'])
