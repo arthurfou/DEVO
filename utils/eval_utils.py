@@ -329,6 +329,7 @@ def log_results(data, hyperparam, all_results, results_dict_scene, figures,
         else:
             train_step = -1
     scene_name = '_'.join(scene.split('/')[1:]).title() if "/P0" in scene else scene.title()
+    scene_name = scene_name.replace('/', '_')
     if outdir is None:
         outdir = "results"
     outfolder = make_outfolder(outdir, dataset_name, expname, scene_name, trial, train_step, stride, calib1_eds, camID_tumvie)

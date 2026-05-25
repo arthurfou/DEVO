@@ -1289,3 +1289,40 @@ def get_calib_fpv(indir):
     Kout[0, 2] = K[2]
     Kout[1, 2] = K[3]
     return Kout, D, T_cam_imu
+
+
+def load_intrinsics_evimo(calib_path):
+    vals = np.loadtxt(calib_path)
+    fx, fy, cx, cy = vals[:4]
+    dist = vals[4:]
+    if len(dist) == 4:
+        dist = np.append(dist, 0.0)
+    K = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=np.float64)
+    K_new, _ = cv2.getOptimalNewCameraMatrix(K, dist, (346, 260), alpha=0, newImgSize=(346, 260))
+    return K_new[0, 0], K_new[1, 1], K_new[0, 2], K_new[1, 2]
+
+
+def evimo_evs_iterator(scenedir, stride=1, dT_ms=None, H=260, W=346, timing=False):
+    calib_path = osp.join(scenedir, "calib.txt")
+    fx, fy, cx, cy = load_intrinsics_evimo(calib_path)
+    intrinsics = torch.from_numpy(np.array([fx, fy, cx, cy]))
+
+    evs_file = osp.join(scenedir, "evs.npy")
+    assert osp.exists(evs_file), f"Run scripts/preprocess_evimo.py first: {evs_file} missing"
+    evs = np.load(evs_file)  # (N, 4): [ts_us, x, y, p]
+
+    rect_file = osp.join(scenedir, "rectify_map.h5")
+    rectify_map = read_rmap(rect_file, H=H, W=W)
+
+    tss_file = osp.join(scenedir, "tss_imgs_us.txt")
+    tss_imgs_us = sorted(np.loadtxt(tss_file))
+    if dT_ms is None:
+        dT_ms = np.diff(tss_imgs_us).mean() / 1e3
+    assert 3 < dT_ms < 1000
+    tss_imgs_us = tss_imgs_us[::stride]
+
+    data_list = get_ecd_data(tss_imgs_us, evs, intrinsics, rectify_map, dT_ms, H, W)
+    print(f"Preloaded {len(data_list)} EVIMO-voxels, stride={stride}, dT_ms={dT_ms:.2f} on {scenedir}")
+
+    for (voxel, intrinsics, ts_us) in data_list:
+        yield voxel.cuda(), intrinsics.cuda(), ts_us
