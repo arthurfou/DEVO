@@ -1,0 +1,18 @@
+
+Scene  ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Bin    0.93     1.056        0.089     \\
+
+Scene   ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Boxes1  0.94     0.83         0.093     \\
+
+Scene     ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Monitor1  0.549    1.806        0.297     \\
+
+Scene   ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Boxes2  0.963    0.829        0.043     \\
+
+Scene     ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Monitor2  0.717    0.785        0.083     \\
+
+Scene   ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Reader  1.216    1.116        0.069     \\

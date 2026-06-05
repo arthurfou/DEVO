@@ -1,0 +1,39 @@
+
+Scene           ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Box_Raw_Seq_00  3.203    102.06       2.25      \\
+
+Scene           ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Box_Raw_Seq_01  38.278   110.106      7.622     \\
+
+Scene           ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Box_Raw_Seq_02  6.712    97.081       2.471     \\
+
+Scene                ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Tabletop_Raw_Seq_00  2.266    105.315      0.879     \\
+
+Scene                ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Tabletop_Raw_Seq_01  1.597    108.232      1.58      \\
+
+Scene                ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Tabletop_Raw_Seq_02  5.181    102.324      0.525     \\
+
+Scene                ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Tabletop_Raw_Seq_03  0.181    176.946      1.115     \\
+
+Scene             ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Table_Raw_Seq_00  4.496    99.336       1.298     \\
+
+Scene             ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Table_Raw_Seq_01  3.298    92.324       1.725     \\
+
+Scene             ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Floor_Raw_Seq_00  2.581    99.437       0.721     \\
+
+Scene             ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Floor_Raw_Seq_01  2.545    97.169       1.715     \\
+
+Scene            ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Fast_Raw_Seq_00  11.632   68.069       3.626     \\
+
+Scene            ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Fast_Raw_Seq_01  8.105    102.089      1.695     \\

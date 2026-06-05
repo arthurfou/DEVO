@@ -163,5 +163,4 @@ datasets/TartanAir
 TartanAirResults
 thirdparty/*
 movies/
-results/*
 TartanAirEVS.pickle

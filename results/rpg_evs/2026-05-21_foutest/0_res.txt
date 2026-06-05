@@ -1,0 +1,9 @@
+
+Scene  ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Bin    2.017    1.335        0.152     \\
+
+Scene  ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Bin    1.039    0.836        0.097     \\
+
+Scene  ATE[cm]  R_rmse[deg]  MPE[%/m]  \\
+Bin    0.912    1.003        0.09      \\
