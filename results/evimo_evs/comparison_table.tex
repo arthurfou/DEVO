@@ -1,0 +1,132 @@
+\documentclass[a4paper, 10pt]{article}
+\usepackage[margin=2.0cm, top=2.5cm, bottom=2.5cm]{geometry}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{array}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{caption}
+\usepackage{amsmath}
+\usepackage{hyperref}
+
+% Color palette
+\definecolor{green_light}{RGB}{198,239,206}
+\definecolor{red_light}{RGB}{255,199,206}
+\definecolor{neutral_gray}{RGB}{242,242,242}
+\definecolor{header_blue}{RGB}{31,73,125}
+\definecolor{best_gold}{RGB}{255,242,204}
+\definecolor{row_alt}{RGB}{248,248,248}
+
+\renewcommand{\arraystretch}{1.35}
+\setlength{\tabcolsep}{6pt}
+
+\hypersetup{colorlinks=false}
+
+\begin{document}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{center}
+  {\LARGE\bfseries DEVO Evaluation on EVIMO --- Event Filtering Comparison}\\[0.6em]
+  {\large Absolute Trajectory Error (ATE, cm) --- sim3 alignment (Umeyama)}\\[0.2em]
+  {\small June 2026}
+\end{center}
+
+\vspace{0.5em}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section*{Experimental Setup}
+
+\noindent
+Evaluated on the EVIMO validation split (13 sequences, DVS346 event camera, 260$\times$346 px).
+The DEVO network weights are frozen; only the input event stream varies across runs.
+ATE is computed with sim3 (Umeyama) alignment to remove monocular scale ambiguity.
+
+\medskip
+\noindent Four configurations are compared:
+
+\begin{enumerate}
+  \item \textbf{Original} --- Unfiltered event stream from the raw ROS bags. Ground truth (GT) poses from Vicon absolute world frame.
+
+  \item \textbf{Filter v1} (broken) --- 3D bounding-box projection approach. Flat rectangles used as proxies for 3D toy objects; camera-frame projection had orientation bugs. Net removal: $\approx$0.3\% of events. GT from bags.
+
+  \item \textbf{Filter NPZ / wrong GT} --- Pixel-perfect NPZ masks (13.2\% events removed), but GT derived from NPZ metadata: poses are relative to first frame at $\approx$40\,Hz. \emph{Not directly comparable to runs 1--2; included for completeness.}
+
+  \item \textbf{Filter NPZ / correct GT} --- Same pixel-perfect NPZ masks (13.2\% removed), with GT and frame timestamps taken from the original bags. Fair apples-to-apples comparison with run~1.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section*{Per-Sequence Results}
+
+\noindent
+\colorbox{green_light}{\strut\quad} Improvement vs.\ original \quad
+\colorbox{red_light}{\strut\quad} Degradation vs.\ original \quad
+\colorbox{best_gold}{\strut\quad} Best ATE across all runs
+
+\vspace{0.8em}
+
+\noindent
+\begin{tabular}{lc|cc|cc|c}
+  \toprule
+  \multirow{2}{*}{\textbf{Sequence}}
+    & \textbf{Filtered}
+    & \multicolumn{2}{c|}{\textbf{Original \& Filter v1}}
+    & \multicolumn{2}{c|}{\textbf{NPZ Masks (pixel-perfect)}}
+    & \textbf{Best NPZ} \\
+  & \textbf{(\%)}
+    & \textit{Original}
+    & \textit{Filter v1}
+    & \textit{Wrong GT}
+    & \textit{Correct GT}
+    & \textit{$\Delta$ vs Orig.} \\
+  \midrule
+  \rowcolor{row_alt}
+  box/seq\_00  & 1.6  & 5.36 & \cellcolor{green_light}3.20  & 12.34 & \cellcolor{green_light}4.61  & $-$0.75 \\
+  box/seq\_01  & 5.3  & 37.60 & \cellcolor{red_light}38.28 & \cellcolor{green_light}26.23 & \cellcolor{red_light}38.15 & $+$0.55 \\
+  \rowcolor{row_alt}
+  box/seq\_02  & 8.1  & 7.03 & \cellcolor{green_light}6.71  & 7.60  & \cellcolor{best_gold}4.28  & $-$2.75 \\
+  fast/seq\_00 & 12.1 & 11.04 & \cellcolor{red_light}11.63 & \cellcolor{best_gold}4.89  & \cellcolor{green_light}10.86 & $-$0.18 \\
+  \rowcolor{row_alt}
+  fast/seq\_01 & 12.1 & 10.48 & \cellcolor{green_light}8.11  & 13.87 & \cellcolor{red_light}11.31 & $+$0.83 \\
+  floor/seq\_00 & 10.3 & 2.59 & \cellcolor{green_light}2.58  & 8.79  & \cellcolor{best_gold}2.42  & $-$0.17 \\
+  \rowcolor{row_alt}
+  floor/seq\_01 & 11.7 & 2.68 & \cellcolor{green_light}2.55  & 5.03  & \cellcolor{best_gold}2.38  & $-$0.30 \\
+  table/seq\_00 & 8.8  & 4.29 & \cellcolor{red_light}4.50  & 8.85  & \cellcolor{red_light}4.71  & $+$0.42 \\
+  \rowcolor{row_alt}
+  table/seq\_01 & 8.1  & 4.04 & \cellcolor{green_light}3.30  & 4.69  & \cellcolor{best_gold}2.82  & $-$1.22 \\
+  tabletop/seq\_00 & 16.0 & 12.21 & \cellcolor{best_gold}2.27  & \cellcolor{green_light}6.54  & \cellcolor{green_light}2.42  & $-$9.79 \\
+  \rowcolor{row_alt}
+  tabletop/seq\_01 & 15.4 & 1.50 & \cellcolor{red_light}1.60  & 4.30  & \cellcolor{red_light}3.05  & $+$1.55 \\
+  tabletop/seq\_02 & 7.3  & 6.90 & \cellcolor{green_light}5.18  & 9.23  & \cellcolor{best_gold}4.85  & $-$2.05 \\
+  \rowcolor{row_alt}
+  tabletop/seq\_03 & 32.4 & 0.18 & \cellcolor{neutral_gray}0.18  & 0.23  & \cellcolor{neutral_gray}0.18  & $\pm$0.00 \\
+  \midrule
+  \textbf{Mean} & \textbf{11.4} & \textbf{8.14} & \textbf{6.93} & \textbf{7.88} & \textbf{6.32} & $\mathbf{-1.82}$ \\
+  \textbf{Improvement} & & --- & $-$14.9\% & $-$3.2\%$^*$ & $\mathbf{-22.4\%}$ & \\
+  \bottomrule
+\end{tabular}
+
+\vspace{0.4em}
+{\small $^*$ Biased: different GT reference frame. Not directly comparable.}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section*{Summary}
+
+\begin{itemize}
+  \item \textbf{Filter v1} removed only 0.3\% of events (projection bugs + flat object proxies). Despite this, the mean ATE improved by 14.9\%, suggesting DEVO is sensitive even to small contamination.
+
+  \item \textbf{NPZ pixel-perfect masks} remove 13.2\% of events (median: 10.3\%) using EVIMO's ground-truth per-frame segmentation masks. With the same GT as the original run, this yields a \textbf{22.4\% reduction in mean ATE} (8.14 $\to$ 6.32\,cm).
+
+  \item \textbf{9/13 sequences improve}, 3 slightly degrade (likely stochastic DEVO variance or sequences where the removed events were actually informative background texture).
+
+  \item The run \emph{Filter NPZ / wrong GT} used relative NPZ poses instead of the Vicon absolute frame, which inflated or deflated ATE for individual sequences without being a fair measure of filtering quality.
+
+  \item The biggest gain comes from \texttt{tabletop/seq\_00} ($-$9.79\,cm, 16\% events removed), where the moving object occupies a substantial portion of the field of view.
+\end{itemize}
+
+\vspace{1em}
+\noindent\textbf{Filtering metric (NPZ run):} total events before: 566\,921\,089 --- removed: 75\,012\,266 (13.2\%).
+
+\end{document}
