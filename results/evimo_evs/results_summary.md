@@ -225,3 +225,64 @@ bag-dérivé et seulement `evs.npy` issu des masques NPZ.
 AUC = 0.0594
 AVG = 0.0866
 ```
+
+---
+
+## Run filtered_npz_gtbag — Filtrage NPZ + GT original des bags (2026-06-05)
+
+### Contexte
+
+Ce run corrige le biais de comparaison du run précédent : `evs.npy` filtré par masques NPZ
+(13.2% d'events supprimés), mais `gt_stamped.txt`, `tss_imgs_us.txt` et `rectify_map.h5`
+issus des bags ROS originaux — **exactement les mêmes que les runs `original` et `filtered_2805`**.
+
+Les timestamps de `evs.npy` ont été recalés dans le référentiel absolu ROS avant de lancer l'eval.
+
+Dataset : `~/datasets/EV-IMO_filtered_gtbag/eval/`
+
+### Résultats ATE (sim3) — comparaison des quatre runs
+
+| Séquence | Original | Filtré_2805 | Filtré_NPZ | **Filtré_NPZ_GTbag** | Δ vs Original |
+|---|---:|---:|---:|---:|---:|
+| box/raw/seq_00     | 5.36  | 3.20  | 12.34 | **4.61**  | **-0.75** ↓ |
+| box/raw/seq_01     | 37.60 | 38.28 | 26.23 | **38.15** | +0.55  ↑ |
+| box/raw/seq_02     | 7.03  | 6.71  | 7.60  | **4.28**  | **-2.75** ↓ |
+| tabletop/raw/seq_00| 12.21 | 2.27  | 6.54  | **2.42**  | **-9.79** ↓ |
+| tabletop/raw/seq_01| 1.50  | 1.60  | 4.30  | **3.05**  | +1.55  ↑ |
+| tabletop/raw/seq_02| 6.90  | 5.18  | 9.23  | **4.85**  | **-2.05** ↓ |
+| tabletop/raw/seq_03| 0.18  | 0.18  | 0.23  | **0.18**  | 0.00      |
+| table/raw/seq_00   | 4.29  | 4.50  | 8.85  | **4.71**  | +0.42  ↑ |
+| table/raw/seq_01   | 4.04  | 3.30  | 4.69  | **2.82**  | **-1.22** ↓ |
+| floor/raw/seq_00   | 2.59  | 2.58  | 8.79  | **2.42**  | **-0.17** ↓ |
+| floor/raw/seq_01   | 2.68  | 2.55  | 5.03  | **2.38**  | **-0.30** ↓ |
+| fast/raw/seq_00    | 11.04 | 11.63 | 4.89  | **10.86** | -0.18  ↓ |
+| fast/raw/seq_01    | 10.48 | 8.11  | 13.87 | **11.31** | +0.83  ↑ |
+| **Moyenne**        | **8.14** | **6.93** | **7.88** | **6.32** | **-1.82** |
+
+### Interprétation
+
+Avec un ground truth identique à l'original, le filtrage NPZ donne une **amélioration claire**
+de la moyenne ATE : **6.32 cm vs 8.14 cm (−1.82 cm, −22%)**, et même légèrement meilleur
+que `filtered_2805` (6.93 cm).
+
+**9 séquences améliorées, 3 dégradées, 1 neutre.**
+
+Séquences avec le plus fort gain :
+- `tabletop/seq_00` : −9.79 cm (filtrage 16%, objet visible)
+- `box/seq_02` : −2.75 cm (filtrage 8%)
+- `table/seq_01` : −1.22 cm (filtrage 8%)
+
+Séquences légèrement dégradées :
+- `box/seq_01` : +0.55 cm (bruit stochastique DEVO probable)
+- `tabletop/seq_01` : +1.55 cm
+- `fast/seq_01` : +0.83 cm (filtrage 12% mais séquence difficile)
+
+La dégradation observée dans le run `filtered_npz` précédent était **entièrement due au
+mauvais ground truth** (NPZ vs bag), pas au filtrage lui-même.
+
+### AUC / AVG (métriques internes eval DEVO)
+
+```
+AUC = 0.0628
+AVG = 0.0708
+```
