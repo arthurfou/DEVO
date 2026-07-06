@@ -1,4 +1,5 @@
 import os
+import shutil
 import torch
 from devo.config import cfg
 
@@ -9,7 +10,7 @@ from utils.viz_utils import viz_flow_inference
 
 @torch.no_grad()
 def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
-             stride=1, trials=1, plot=False, save=False, return_figure=False, viz=False, timing=False, side='left', viz_flow=False):
+             stride=1, trials=1, plot=False, save=False, return_figure=False, viz=False, timing=False, side='left', viz_flow=False, map_path=None):
     dataset_name = "rpg_evs"
     assert side == "left" or side == "right"
 
@@ -41,21 +42,29 @@ def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
         for trial in range(trials):
             datapath_val = os.path.join(datapath, scene)
 
+            # chemin temporaire par scène, déplacé dans outfolder après log_results
+            tmp_map_path = None
+            if map_path is not None:
+                tmp_map_path = os.path.join(os.path.dirname(map_path), f"_tmp_{scene}_{trial}.ply")
+
             # run the slam system
-            traj_est, tstamps, flowdata = run_voxel(datapath_val, config, net, viz=viz, 
+            traj_est, tstamps, flowdata = run_voxel(datapath_val, config, net, viz=viz,
                                           iterator=rpg_evs_iterator(datapath_val, side=side, stride=stride, timing=timing, dT_ms=None, H=H, W=W), # optionally pass DELTA_MS
-                                          timing=timing, H=H, W=W, viz_flow=viz_flow)
+                                          timing=timing, H=H, W=W, viz_flow=viz_flow, map_path=tmp_map_path)
 
             # load traj
             tss_traj_us, traj_hf = load_gt_us(traj_hf_path)
- 
-            # do evaluation 
+
+            # do evaluation
             data = (traj_hf, tss_traj_us, traj_est, tstamps)
             hyperparam = (train_step, net, dataset_name, scene, trial, cfg, args)
-            all_results, results_dict_scene, figures, outfolder = log_results(data, hyperparam, all_results, results_dict_scene, figures, 
+            all_results, results_dict_scene, figures, outfolder = log_results(data, hyperparam, all_results, results_dict_scene, figures,
                                                                    plot=plot, save=save, return_figure=return_figure, stride=stride,
                                                                    expname=args.expname)
-            
+
+            if tmp_map_path is not None and os.path.exists(tmp_map_path):
+                shutil.move(tmp_map_path, os.path.join(outfolder, "map.ply"))
+
             if viz_flow:
                 viz_flow_inference(outfolder, flowdata)
             
@@ -87,6 +96,7 @@ if __name__ == '__main__':
     parser.add_argument('--side', type=str, default="left")
     parser.add_argument('--viz_flow', action="store_true")
     parser.add_argument('--expname', type=str, default="")
+    parser.add_argument('--map_path', type=str, default=None, help="If set, export a PLY point cloud map to this path")
 
     args = parser.parse_args()
     assert_eval_config(args)
@@ -102,7 +112,7 @@ if __name__ == '__main__':
     # args.viz_flow = True
     val_results, val_figures = evaluate(cfg, args, args.weights, datapath=args.datapath, split_file=args.val_split, trials=args.trials, \
                        plot=args.plot, save=args.save_trajectory, return_figure=args.return_figs, viz=args.viz, timing=args.timing, \
-                        side=args.side, stride=args.stride, viz_flow=args.viz_flow)
+                        side=args.side, stride=args.stride, viz_flow=args.viz_flow, map_path=args.map_path)
     
     print("val_results= \n")
     for k in val_results:
