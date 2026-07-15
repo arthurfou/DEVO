@@ -107,22 +107,26 @@ def run_voxel_norm_seq(voxeldir, cfg, network, viz=False, iterator=None, timing=
 
 
 @torch.no_grad()
-def run_voxel(voxeldir, cfg, network, viz=False, iterator=None, timing=False, H=480, W=640, viz_flow=False, scale=1.0, **kwargs): 
+def run_voxel(voxeldir, cfg, network, viz=False, iterator=None, timing=False, H=480, W=640, viz_flow=False, scale=1.0, dyn_mask_provider=None, **kwargs):
+    # dyn_mask_provider (optional): callable ts_us -> score dynamique (h/4,w/4) [ou None]
+    #   par frame. Injecté dans le patch selector pour annuler la score map aux objets
+    #   mobiles (jalon 1 / M0). None => DEVO vanilla strictement identique.
     slam = DEVO(cfg, network, evs=True, ht=H, wd=W, viz=viz, viz_flow=viz_flow, **kwargs)
-    
+
     for i, (voxel, intrinsics, t) in enumerate(iterator):
         if timing and i == 0:
             t0 = torch.cuda.Event(enable_timing=True)
             t1 = torch.cuda.Event(enable_timing=True)
             t0.record()
 
-        if viz: 
+        if viz:
             # import matplotlib.pyplot as plt
             # plt.switch_backend('Qt5Agg')
             visualize_voxel(voxel.detach().cpu())
-        
+
+        dyn_score = None if dyn_mask_provider is None else dyn_mask_provider(t)
         with Timer("DEVO", enabled=timing):
-            slam(t, voxel, intrinsics, scale=scale)
+            slam(t, voxel, intrinsics, scale=scale, dyn_score=dyn_score)
 
     for _ in range(12):
         slam.update()

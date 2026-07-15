@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from collections import OrderedDict
 
 import torch_scatter
-from torch_scatter import scatter_sum
+from torch_scatter import scatter_sum, scatter_mean
 from torchvision.ops import batched_nms
 
 from . import fastba
@@ -119,8 +119,17 @@ class Patchifier(nn.Module):
         g = F.avg_pool2d(g, 4, 4)
         return g
 
-    def forward(self, images, patches_per_image=80, disps=None, return_color=False, scorer_eval_mode="multi", scorer_eval_use_grid=True):
-        """ extract patches from input images """
+    def forward(self, images, patches_per_image=80, disps=None, return_color=False, scorer_eval_mode="multi", scorer_eval_use_grid=True, dyn_score=None):
+        """ extract patches from input images
+
+        dyn_score (optional): tenseur (b, n, h/4, w/4) [ou broadcastable] de probabilité
+            "dynamique" par cellule de la score map, valeurs dans [0, 1] (1 = objet mobile).
+            Si fourni, la score map est atténuée par (1 - dyn_score) AVANT la sélection des
+            patches, pour que les patches sur objets mobiles ne soient jamais choisis
+            (jalon 1 / M0 avec masque oracle, et injection couplée M2/M3).
+            None => comportement DEVO vanilla strictement identique (point d'injection
+            documenté dans DEVO/CLAUDE.md).
+        """
         fmap = self.fnet(images) / 4.0 # (1, 15, 128, 120, 160)
         imap = self.inet(images) / 4.0 # (1, 15, 384, 120, 160)
 
@@ -148,7 +157,18 @@ class Patchifier(nn.Module):
         elif self.patch_selector == SelectionMethod.SCORER:
             scores = self.scorer(images) # (1, 15, 118, 158)
             scores = torch.sigmoid(scores)
-            
+
+            # --- Motion-segmentation injection (jalon 1 / M2-M3) ---
+            # Atténue la score map aux positions dynamiques. None = vanilla.
+            if dyn_score is not None:
+                if dyn_score.shape[-2:] != scores.shape[-2:]:
+                    # aligne la résolution du masque sur celle de la score map (nearest -> garde le binaire)
+                    dyn_score = F.interpolate(
+                        dyn_score.view(-1, 1, *dyn_score.shape[-2:]).float(),
+                        size=scores.shape[-2:], mode="nearest",
+                    ).view(scores.shape[0], scores.shape[1], *scores.shape[-2:])
+                scores = scores * (1.0 - dyn_score.to(scores.dtype)).clamp(min=0.0, max=1.0)
+
             if self.training:
                 x = torch.randint(0, w-2, size=[n, 3*patches_per_image], device="cuda")
                 y = torch.randint(0, h-2, size=[n, 3*patches_per_image], device="cuda")
@@ -216,6 +236,32 @@ class CorrBlock:
         return torch.stack(corrs, -1).view(1, len(ii), -1)
 
 
+def _sample_patch_scores(dyn_mask, patches, ix):
+    """Échantillonne un masque dense dynamique aux coordonnées des patches (jalon 2 / M2).
+
+    dyn_mask: (b, n, Hp, Wp) probabilité "dynamique" par cellule (résolution score map).
+    patches:  (b, K, 3, P, P) — patches[:, :, 0/1, ..] = coords (x, y) en unités (H//4, W//4).
+    ix:       (K,) index de frame de chaque patch.
+    Retourne (b, K) score dynamique par patch, DIFFÉRENTIABLE (grid_sample). Suppose b=1
+    (comme l'entraînement DEVO ; le pose-loss ne gère qu'un batch de 1 via kabsch_umeyama).
+    """
+    b, n, Hp, Wp = dyn_mask.shape
+    p = patches.shape[-1]
+    xc = patches[:, :, 0, p // 2, p // 2]  # (b, K)
+    yc = patches[:, :, 1, p // 2, p // 2]  # (b, K)
+    K = xc.shape[1]
+    gx = 2.0 * xc / max(Wp - 1, 1) - 1.0
+    gy = 2.0 * yc / max(Hp - 1, 1) - 1.0
+    grid = torch.stack([gx, gy], dim=-1)   # (b, K, 2)
+    dm = dyn_mask[0]                        # (n, Hp, Wp), b=1
+    sampled = F.grid_sample(
+        dm[ix].unsqueeze(1),               # (K, 1, Hp, Wp)
+        grid[0].view(K, 1, 1, 2),          # (K, 1, 1, 2)
+        mode="bilinear", align_corners=True, padding_mode="border",
+    )
+    return sampled.view(1, K)              # (b=1, K)
+
+
 class eVONet(nn.Module):
     def __init__(self, P=3, use_viewer=False, dim_inet=DIM, dim_fnet=128, dim=32, patch_selector=SelectionMethod.SCORER, norm="std2", randaug=False):
         super(eVONet, self).__init__()
@@ -233,8 +279,21 @@ class eVONet(nn.Module):
 
 
     @autocast(enabled=False)
-    def forward(self, images, poses, disps, intrinsics, M=1024, STEPS=12, P=1, structure_only=False, plot_patches=False, patches_per_image=80):
-        """ Estimates SE3 between pair of voxel grids """
+    def forward(self, images, poses, disps, intrinsics, M=1024, STEPS=12, P=1, structure_only=False, plot_patches=False, patches_per_image=80, dyn_mask=None, return_selfsup=False):
+        """ Estimates SE3 between pair of voxel grids
+
+        dyn_mask (optional): masque dense dynamique (b, n_frames, Hp, Wp) dans [0, 1]
+            (1 = objet mobile), typiquement produit par un modèle de motion segmentation.
+            Échantillonné aux coords des patches -> atténue la confiance ω dans la BA
+            différentiable (jalon 2 / entraînement couplé M2). Le gradient de la pose-loss
+            remonte donc jusqu'au modèle de masque. None => DEVO vanilla strictement identique.
+
+        return_selfsup (jalon 3 / M3) : si True, renvoie en plus un signal AUTO-SUPERVISÉ
+            par patch = résidu ||target - reprojection(pose estimée)|| (incohérence au
+            mouvement rigide dominant, cf. EV-IMO). NE NÉCESSITE AUCUN GT. Sert de cible
+            pour entraîner le masque à reconnaître les objets mobiles depuis les seuls events.
+            Retour: (traj, res_patch, patches, ix) — res_patch, patches, ix détachés.
+        """
         
         # images (b,n_frames,c,h,w)
         # poses (b,n_frames)
@@ -281,8 +340,12 @@ class eVONet(nn.Module):
             fmap, gmap, imap, patches, ix = self.patchify(images, patches_per_image=patches_per_image, disps=disps)
         # 1200 patches / 15 imgs = 80 patches per image
         # ix are image indices, i.e. simply (n_images, 80).flatten() = 15*80 = 1200 = n_patches
-        # patches is (B, n_patches, 3, 3, 3), where (:, n_patches, 0, :, :) are x-coords, (:, n_patches, 1, :, :) are y-coords, (:, n_patches, 2, :, :) are depths 
-        
+        # patches is (B, n_patches, 3, 3, 3), where (:, n_patches, 0, :, :) are x-coords, (:, n_patches, 1, :, :) are y-coords, (:, n_patches, 2, :, :) are depths
+
+        # Motion-segmentation (jalon 2 / M2) : score dynamique par patch (différentiable).
+        # None => vanilla. Calculé une fois ; réutilisé à chaque appel BA de la boucle.
+        dyn_patch = None if dyn_mask is None else _sample_patch_scores(dyn_mask, patches, ix)
+
         corr_fn = CorrBlock(fmap, gmap)
 
         b, N, c, h, w = fmap.shape
@@ -309,6 +372,7 @@ class eVONet(nn.Module):
             Gs.data[:] = poses.data[:]
 
         traj = []
+        selfsup_res_patch = None  # jalon 3 / M3 : résidu auto-supervisé par patch (dernière itération)
         bounds = [-64, -64, w + 64, h + 64]
         
         while len(traj) < STEPS:
@@ -351,9 +415,10 @@ class eVONet(nn.Module):
             target = coords[...,p//2,p//2,:] + delta # (B, edges, 2)
 
             ep = 10
+            dyn_weights = None if dyn_patch is None else dyn_patch[:, kk]  # (b, edges)
             for itr in range(2):
-                Gs, patches = BA(Gs, patches, intrinsics, target, weight, lmbda, ii, jj, kk, 
-                    bounds, ep=ep, fixedp=1, structure_only=structure_only)
+                Gs, patches = BA(Gs, patches, intrinsics, target, weight, lmbda, ii, jj, kk,
+                    bounds, ep=ep, fixedp=1, structure_only=structure_only, dyn_weights=dyn_weights)
 
             kl = torch.as_tensor(0)
             dij = (ii - jj).abs()
@@ -361,6 +426,15 @@ class eVONet(nn.Module):
 
             if self.patch_selector == SelectionMethod.SCORER:
                 coords_full = pops.transform(Gs, patches, intrinsics, ii, jj, kk) # p_ij (B,close_edges,P,P,2)
+
+                # jalon 3 / M3 : résidu auto-supervisé par patch = incohérence au mouvement rigide.
+                # target (correspondance observée par l'update) vs reprojection sous pose estimée.
+                # AUCUN GT requis. Détaché -> sert de cible pour entraîner le masque.
+                if return_selfsup:
+                    center = coords_full[..., p // 2, p // 2, :]        # (B, edges, 2)
+                    res_edge = (target - center).norm(dim=-1)[0]        # (edges,)
+                    selfsup_res_patch = scatter_mean(res_edge, kk, dim=0, dim_size=ix.shape[0])  # (n_patches,)
+
                 coords_gt_full, valid_full = pops.transform(Ps, patches_gt, intrinsics, ii, jj, kk, valid=True)
                 coords = pops.transform(Gs, patches, intrinsics, ii[k], jj[k], kk[k]) # p_ij (B,close_edges,P,P,2)
                 coords_gt, valid = pops.transform(Ps, patches_gt, intrinsics, ii[k], jj[k], kk[k], valid=True)
@@ -381,5 +455,7 @@ class eVONet(nn.Module):
                 plot_data.append((ii, jj, patches, coordsAll, coords1_gt))
 
         if plot_patches:
-            traj.append(plot_data)        
+            traj.append(plot_data)
+        if return_selfsup:
+            return traj, selfsup_res_patch.detach(), patches.detach(), ix
         return traj

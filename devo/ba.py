@@ -83,8 +83,15 @@ def block_show(A):
     plt.imshow(A[0].detach().cpu().numpy())
     plt.show()
 
-def BA(poses, patches, intrinsics, targets, weights, lmbda, ii, jj, kk, bounds, ep=100.0, PRINT=False, fixedp=1, structure_only=False):
-    """ bundle adjustment """
+def BA(poses, patches, intrinsics, targets, weights, lmbda, ii, jj, kk, bounds, ep=100.0, PRINT=False, fixedp=1, structure_only=False, dyn_weights=None):
+    """ bundle adjustment
+
+    dyn_weights (optional): score "dynamique" par arête (broadcastable sur `weights`),
+        valeurs dans [0, 1] (1 = dynamique). Si fourni, les poids de confiance ω sont
+        atténués par (1 - dyn_weights) => les patches sur objets mobiles pèsent moins
+        dans l'optimisation de pose (jalon 2 / M2-M3). Différentiable par rapport à
+        dyn_weights. None => BA vanilla strictement identique.
+    """
 
     b = 1
     n = max(ii.max().item(), jj.max().item()) + 1
@@ -108,8 +115,16 @@ def BA(poses, patches, intrinsics, targets, weights, lmbda, ii, jj, kk, bounds, 
     if PRINT:
         print((r * v[...,None]).norm(dim=-1).mean().item())
 
-    r = (v[...,None] * r).unsqueeze(dim=-1)    
+    r = (v[...,None] * r).unsqueeze(dim=-1)
     weights = (v[...,None] * weights).unsqueeze(dim=-1)
+
+    # --- Motion-segmentation injection (jalon 2 / M2-M3) ---
+    # Atténue la confiance ω aux arêtes dynamiques. None = vanilla.
+    if dyn_weights is not None:
+        dw = (1.0 - dyn_weights.to(weights.dtype)).clamp(min=0.0, max=1.0)
+        while dw.dim() < weights.dim():
+            dw = dw.unsqueeze(-1)
+        weights = weights * dw
 
     wJiT = (weights * Ji).transpose(2,3)
     wJjT = (weights * Jj).transpose(2,3)

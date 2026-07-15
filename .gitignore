@@ -160,6 +160,7 @@ data
 figures/*.pdf
 
 rsync*
+results_hpc/
 models/*
 datasets/TartanAir.pickle
 datasets/TartanAir

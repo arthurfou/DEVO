@@ -12,7 +12,11 @@ H, W = 260, 346  # DVS346
 
 @torch.no_grad()
 def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
-             stride=1, trials=1, plot=False, save=False, return_figure=False, viz=False, timing=False, viz_flow=False, map_path=None):
+             stride=1, trials=1, plot=False, save=False, return_figure=False, viz=False, timing=False, viz_flow=False, map_path=None,
+             dyn_mask_provider_factory=None):
+    # dyn_mask_provider_factory (optional): callable (scene, datapath_val) -> provider [ou None].
+    #   Le provider (ex. ms_model.oracle.OracleDynMaskProvider) fournit par frame un score
+    #   dynamique injecté dans le patch selector (jalon 1 / M0). None => éval DEVO vanilla.
     dataset_name = "evimo_evs"
 
     if config is None:
@@ -36,10 +40,14 @@ def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
         for trial in range(trials):
             datapath_val = os.path.join(datapath, scene)
 
+            dyn_mask_provider = None if dyn_mask_provider_factory is None \
+                else dyn_mask_provider_factory(scene, datapath_val)
+
             traj_est, tstamps, flowdata = run_voxel(
                 datapath_val, config, net, viz=viz,
                 iterator=evimo_evs_iterator(datapath_val, stride=stride, timing=timing, H=H, W=W),
-                timing=timing, H=H, W=W, viz_flow=viz_flow, map_path=map_path)
+                timing=timing, H=H, W=W, viz_flow=viz_flow, map_path=map_path,
+                dyn_mask_provider=dyn_mask_provider)
 
             tss_traj_us, traj_hf = load_gt_us(gt_path)
 

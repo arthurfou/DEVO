@@ -421,8 +421,13 @@ class DEVO:
             torch.arange(t0, t1, device="cuda"),
             torch.arange(max(self.n-r, 0), self.n, device="cuda"), indexing='ij')
 
-    def __call__(self, tstamp, image, intrinsics, scale=1.0):
-        """ track new frame """
+    def __call__(self, tstamp, image, intrinsics, scale=1.0, dyn_score=None):
+        """ track new frame
+
+        dyn_score (optional): masque/score "dynamique" (h/4, w/4) [ou broadcastable] pour
+            cette frame, valeurs dans [0, 1] (1 = objet mobile). Transmis au patch selector
+            pour atténuer la score map (jalon 1 / M0). None => DEVO vanilla identique.
+        """
 
         if (self.n+1) >= self.N:
             raise Exception(f'The buffer size is too small. You can increase it using "--buffer {self.N*2}"')
@@ -517,10 +522,11 @@ class DEVO:
         with autocast(enabled=self.cfg.MIXED_PRECISION):
             fmap, gmap, imap, patches, _, clr = \
                 self.network.patchify(image,
-                    patches_per_image=self.cfg.PATCHES_PER_FRAME, 
+                    patches_per_image=self.cfg.PATCHES_PER_FRAME,
                     return_color=True,
                     scorer_eval_mode=self.cfg.SCORER_EVAL_MODE,
-                    scorer_eval_use_grid=self.cfg.SCORER_EVAL_USE_GRID)
+                    scorer_eval_use_grid=self.cfg.SCORER_EVAL_USE_GRID,
+                    dyn_score=dyn_score)
 
         self.patches_gt_[self.n] = patches.clone()
 
