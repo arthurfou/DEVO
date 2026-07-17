@@ -18,9 +18,11 @@ supervisée, en fournissant un masque GT par le dataset (voir `--help` / TODO gt
 Mono-GPU (fine-tuning). Lancer depuis la racine du repo DEVO, env `devo`, `ms_model` installé.
 """
 import os
+import random
 import argparse
 from collections import OrderedDict
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
@@ -29,6 +31,20 @@ from devo.data_readers.factory import dataset_factory
 from devo.lietorch import SE3
 from devo.enet import eVONet, _sample_patch_scores
 from devo.selector import SelectionMethod
+
+
+def seed_everything(seed):
+    """Seed torch/numpy/python + retourne un worker_init_fn qui seed chaque worker DataLoader."""
+    if seed is None:
+        return None
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    def _wif(worker_id):
+        s = seed + worker_id
+        random.seed(s); np.random.seed(s); torch.manual_seed(s)
+    return _wif
 
 
 def kabsch_umeyama(A, B):
@@ -143,8 +159,15 @@ def build_dataset(args):
 def train_coupled(args):
     device = torch.device("cuda")
 
+    worker_init = seed_everything(args.seed)
+    if args.seed is not None:
+        print(f"[seed] torch/numpy/random/cuda seedés à {args.seed}, DataLoader workers seedés en cascade", flush=True)
+
     db = build_dataset(args)
-    loader = DataLoader(db, batch_size=1, shuffle=True, num_workers=4)
+    g = torch.Generator(); g.manual_seed(args.seed) if args.seed is not None else None
+    loader = DataLoader(db, batch_size=1, shuffle=True, num_workers=4,
+                        worker_init_fn=worker_init,
+                        generator=g if args.seed is not None else None)
 
     net = eVONet(dim_inet=args.dim_inet, dim_fnet=args.dim_fnet, dim=args.dim,
                  patch_selector=args.patch_selector.lower(), norm=args.norm)
@@ -290,6 +313,9 @@ if __name__ == "__main__":
     # logging
     p.add_argument('--log_every', type=int, default=20)
     p.add_argument('--save_every', type=int, default=2000)
+    # reproductibilité
+    p.add_argument('--seed', type=int, default=None,
+                   help='seed torch/numpy/random/DataLoader (défaut None = pas de seeding explicite)')
     args = p.parse_args()
 
     train_coupled(args)

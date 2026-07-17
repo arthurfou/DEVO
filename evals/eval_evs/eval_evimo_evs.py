@@ -1,4 +1,5 @@
 import os
+import shutil
 import torch
 from devo.config import cfg
 
@@ -43,10 +44,14 @@ def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
             dyn_mask_provider = None if dyn_mask_provider_factory is None \
                 else dyn_mask_provider_factory(scene, datapath_val)
 
+            tmp_map_path = None
+            if map_path is not None:
+                tmp_map_path = os.path.join(os.path.dirname(map_path), f"_tmp_{scene.replace('/', '_')}_{trial}.ply")
+
             traj_est, tstamps, flowdata = run_voxel(
                 datapath_val, config, net, viz=viz,
                 iterator=evimo_evs_iterator(datapath_val, stride=stride, timing=timing, H=H, W=W),
-                timing=timing, H=H, W=W, viz_flow=viz_flow, map_path=map_path,
+                timing=timing, H=H, W=W, viz_flow=viz_flow, map_path=tmp_map_path,
                 dyn_mask_provider=dyn_mask_provider)
 
             tss_traj_us, traj_hf = load_gt_us(gt_path)
@@ -57,6 +62,9 @@ def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
                 data, hyperparam, all_results, results_dict_scene, figures,
                 plot=plot, save=save, return_figure=return_figure, stride=stride,
                 expname=args.expname)
+
+            if tmp_map_path is not None and os.path.exists(tmp_map_path):
+                shutil.move(tmp_map_path, os.path.join(outfolder, "map.ply"))
 
             if viz_flow:
                 viz_flow_inference(outfolder, flowdata)

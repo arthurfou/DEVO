@@ -11,23 +11,33 @@
 #SBATCH --output=logs/%x_%j.log
 set -eo pipefail
 
-# === À ÉDITER ===
-REPO_DEVO=${REPO_DEVO:-$HOME/IPAL/arthur_ipal/DEVO}
-MS_MODEL=${MS_MODEL:-$HOME/IPAL/arthur_ipal/MS_Model}
-DATAPATH=${DATAPATH:-$HOME/IPAL/arthur_ipal/datasets/evimo/eval}
-MASK_ROOT=${MASK_ROOT:-$HOME/IPAL/arthur_ipal/datasets/evimo_full/eval}
-DEVO_WEIGHTS=${DEVO_WEIGHTS:-DEVO.pth}
+# === Cluster NUS SoC (i0002573) ===
+REPO_DEVO=${REPO_DEVO:-/home/i/i0002573/arthur_ipal/DEVO}
+MS_MODEL=${MS_MODEL:-/home/i/i0002573/arthur_ipal/MS_Model}
+DATAPATH=${DATAPATH:-/home/i/i0002573/arthur_ipal/datasets/evimo_filtered_2805/eval}
+MASK_ROOT=${MASK_ROOT:-/home/i/i0002573/arthur_ipal/datasets/evimo_full/eval}
+DEVO_WEIGHTS=${DEVO_WEIGHTS:-/home/i/i0002573/test_perso/DEVO/DEVO.pth}
 VAL_SPLIT=${VAL_SPLIT:-splits/evimo/evimo_val.txt}
 MS_CONFIG=${MS_CONFIG:-$MS_MODEL/configs/convlstm_v4_full.yaml}
 MS_DECOUPLED=${MS_DECOUPLED:-$MS_MODEL/checkpoints/v4-full-run1/best.pt}
-MS_COUPLED_SUP=${MS_COUPLED_SUP:-results_coupled/m2/ms_final.pt}
-MS_COUPLED_SELFSUP=${MS_COUPLED_SELFSUP:-results_coupled/m3/ms_final.pt}
-OUTDIR=${OUTDIR:-results/central_table}
+# Nommage seed-aware. SEED= vide -> results_coupled/m{2,3}/ms_final.pt (run initial).
+# SEED=N -> results_coupled/m{2,3}_seed$N/ms_final.pt + results/central_table_seed$N/.
+SEED=${SEED:-}
+if [ -n "$SEED" ]; then
+    MS_COUPLED_SUP=${MS_COUPLED_SUP:-results_coupled/m2_seed${SEED}/ms_final.pt}
+    MS_COUPLED_SELFSUP=${MS_COUPLED_SELFSUP:-results_coupled/m3_seed${SEED}/ms_final.pt}
+    OUTDIR=${OUTDIR:-results/central_table_seed${SEED}}
+else
+    MS_COUPLED_SUP=${MS_COUPLED_SUP:-results_coupled/m2/ms_final.pt}
+    MS_COUPLED_SELFSUP=${MS_COUPLED_SELFSUP:-results_coupled/m3/ms_final.pt}
+    OUTDIR=${OUTDIR:-results/central_table}
+fi
 # ================
 
 source "$HOME/miniconda3/etc/profile.d/conda.sh"
-conda activate devo
+conda activate devofou
 cd "$REPO_DEVO"
+export PYTHONPATH=$REPO_DEVO:$PYTHONPATH
 mkdir -p logs
 
 # Construit les args optionnels seulement si le checkpoint existe (sinon la ligne = "—").
@@ -36,11 +46,15 @@ EXTRA=""
 [ -f "$MS_COUPLED_SUP" ]      && EXTRA="$EXTRA --ms_coupled_sup $MS_COUPLED_SUP"
 [ -f "$MS_COUPLED_SELFSUP" ]  && EXTRA="$EXTRA --ms_coupled_selfsup $MS_COUPLED_SELFSUP"
 
-python evals/eval_evs/eval_evimo_central_table.py \
+SEED_ARG=""
+[ -n "$SEED" ] && SEED_ARG="--seed $SEED"
+
+python -u evals/eval_evs/eval_evimo_central_table.py \
     --datapath "$DATAPATH" \
     --weights "$DEVO_WEIGHTS" \
     --val_split "$VAL_SPLIT" \
     --mask_root "$MASK_ROOT" \
     --ms_config "$MS_CONFIG" \
     --outdir "$OUTDIR" \
+    $SEED_ARG \
     $EXTRA

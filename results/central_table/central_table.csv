@@ -1,0 +1,6 @@
+config,ate_mean,delta_pct_vs_vanilla
+DEVO vanilla,11.411868,0.00
+DEVO + oracle GT,10.726380,6.01
+DEVO + appris découplé (M1),10.985894,3.73
+DEVO + couplé supervisé (M2),10.866079,4.78
+DEVO + couplé auto-sup (M3),10.588861,7.21

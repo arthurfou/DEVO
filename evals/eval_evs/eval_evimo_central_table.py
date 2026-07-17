@@ -83,11 +83,16 @@ if __name__ == "__main__":
     p.add_argument('--stride', type=int, default=1)
     p.add_argument('--outdir', default="results/central_table")
     p.add_argument('--expname', default="central")
+    p.add_argument('--seed', type=int, default=1234,
+                   help='seed torch pour la variance eval (DEVO fait torch.rand_like pour depth init)')
     args = p.parse_args()
     assert_eval_config(args)
 
     cfg.merge_from_file(args.config)
-    torch.manual_seed(1234)
+    torch.manual_seed(args.seed)
+    import numpy as np, random
+    np.random.seed(args.seed); random.seed(args.seed)
+    print(f"[central_table] seed torch/numpy/random = {args.seed}", flush=True)
     args.plot = False
     args.save_trajectory = True
     common = dict(datapath=args.datapath, split_file=args.val_split,

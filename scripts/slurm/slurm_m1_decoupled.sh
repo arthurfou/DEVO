@@ -10,20 +10,21 @@
 #SBATCH --output=logs/%x_%j.log
 set -eo pipefail
 
-# === À ÉDITER ===
-REPO_DEVO=${REPO_DEVO:-$HOME/IPAL/arthur_ipal/DEVO}
-MS_MODEL=${MS_MODEL:-$HOME/IPAL/arthur_ipal/MS_Model}
-DATAPATH=${DATAPATH:-$HOME/IPAL/arthur_ipal/datasets/evimo/eval}
-MASK_ROOT=${MASK_ROOT:-$HOME/IPAL/arthur_ipal/datasets/evimo_full/eval}
-DEVO_WEIGHTS=${DEVO_WEIGHTS:-DEVO.pth}
+# === Cluster NUS SoC (i0002573) ===
+REPO_DEVO=${REPO_DEVO:-/home/i/i0002573/arthur_ipal/DEVO}
+MS_MODEL=${MS_MODEL:-/home/i/i0002573/arthur_ipal/MS_Model}
+DATAPATH=${DATAPATH:-/home/i/i0002573/arthur_ipal/datasets/evimo_filtered_2805/eval}
+MASK_ROOT=${MASK_ROOT:-/home/i/i0002573/arthur_ipal/datasets/evimo_full/eval}
+DEVO_WEIGHTS=${DEVO_WEIGHTS:-/home/i/i0002573/test_perso/DEVO/DEVO.pth}
 VAL_SPLIT=${VAL_SPLIT:-splits/evimo/evimo_val.txt}
 MS_WEIGHTS=${MS_WEIGHTS:-$MS_MODEL/checkpoints/v4-full-run1/best.pt}
 MS_CONFIG=${MS_CONFIG:-$MS_MODEL/configs/convlstm_v4_full.yaml}
 # ================
 
 source "$HOME/miniconda3/etc/profile.d/conda.sh"
-conda activate devo
+conda activate devofou
 cd "$REPO_DEVO"
+export PYTHONPATH=$REPO_DEVO:$PYTHONPATH
 mkdir -p logs
 
 python evals/eval_evs/eval_evimo_m1_decoupled.py \

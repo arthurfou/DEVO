@@ -10,18 +10,19 @@
 #SBATCH --output=logs/%x_%j.log
 set -eo pipefail
 
-# === À ÉDITER (chemins cluster ; surchargables via --export=ALL,VAR=...) ===
-REPO_DEVO=${REPO_DEVO:-$HOME/IPAL/arthur_ipal/DEVO}
-DATAPATH=${DATAPATH:-$HOME/IPAL/arthur_ipal/datasets/evimo/eval}       # scènes preprocessées (evs.npy, gt_stamped.txt)
-MASK_ROOT=${MASK_ROOT:-$HOME/IPAL/arthur_ipal/datasets/evimo_full/eval}  # npz EVIMO (mask+meta)
-DEVO_WEIGHTS=${DEVO_WEIGHTS:-DEVO.pth}
+# === Cluster NUS SoC (i0002573) — chemins ; surchargables via --export=ALL,VAR=... ===
+REPO_DEVO=${REPO_DEVO:-/home/i/i0002573/arthur_ipal/DEVO}
+DATAPATH=${DATAPATH:-/home/i/i0002573/arthur_ipal/datasets/evimo_filtered_2805/eval}   # scènes preprocessées (evs.npy, gt_stamped.txt)
+MASK_ROOT=${MASK_ROOT:-/home/i/i0002573/arthur_ipal/datasets/evimo_full/eval}          # npz EVIMO (mask+meta)
+DEVO_WEIGHTS=${DEVO_WEIGHTS:-/home/i/i0002573/test_perso/DEVO/DEVO.pth}
 VAL_SPLIT=${VAL_SPLIT:-splits/evimo/evimo_val.txt}
 THICKEN=${THICKEN:-2}
 # =========================================================================
 
 source "$HOME/miniconda3/etc/profile.d/conda.sh"
-conda activate devo
+conda activate devofou
 cd "$REPO_DEVO"
+export PYTHONPATH=$REPO_DEVO:$PYTHONPATH
 mkdir -p logs
 
 python evals/eval_evs/eval_evimo_m0_oracle.py \
