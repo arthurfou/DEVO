@@ -1,0 +1,161 @@
+[1mdiff --git a/evals/eval_evs/eval_evimo_m1_decoupled.py b/evals/eval_evs/eval_evimo_m1_decoupled.py[m
+[1mindex 1b9935e..aff390b 100644[m
+[1m--- a/evals/eval_evs/eval_evimo_m1_decoupled.py[m
+[1m+++ b/evals/eval_evs/eval_evimo_m1_decoupled.py[m
+[36m@@ -26,6 +26,7 @@[m [ml'oracle GT. Compare 3 passes : vanilla / oracle (plafond) / appris (baseline).[m
+ import os[m
+ import argparse[m
+ [m
+[32m+[m[32mimport numpy as np[m
+ import torch[m
+ from devo.config import cfg[m
+ from utils.eval_utils import assert_eval_config[m
+[36m@@ -40,37 +41,63 @@[m [mdef _resolve_npz(scene, mask_root):[m
+     return os.path.join(mask_root, cat, "npz", f"{seq}.npz")[m
+ [m
+ [m
+[32m+[m[32mdef _ts_offset(datapath_val, npz_path):[m
+[32m+[m[32m    """Offset (s) à soustraire de ts_us/1e6 pour aligner avec les ts relatifs du npz.[m
+[32m+[m
+[32m+[m[32m    EVIMO npz stocke meta["frames"]["ts"] en secondes relatives (0.04, 0.07, …).[m
+[32m+[m[32m    DEVO utilise des ts_us en Unix epoch µs (~1.54e15 µs = 1.54e9 s).[m
+[32m+[m[32m    Offset = tss_imgs_us[0]/1e6 − meta_ts[0] ≈ Unix_start_s.[m
+[32m+[m[32m    Sans correction, searchsorted retourne toujours le dernier indice.[m
+[32m+[m[32m    """[m
+[32m+[m[32m    from ms_model.io.loaders import load_evimo_mask[m
+[32m+[m[32m    tss_file = os.path.join(datapath_val, "tss_imgs_us.txt")[m
+[32m+[m[32m    if not os.path.exists(tss_file):[m
+[32m+[m[32m        return 0.0[m
+[32m+[m[32m    tss_us = np.loadtxt(tss_file)[m
+[32m+[m[32m    if tss_us.ndim == 0:[m
+[32m+[m[32m        tss_us = np.array([float(tss_us)])[m
+[32m+[m[32m    fm = load_evimo_mask(npz_path)[m
+[32m+[m[32m    if len(tss_us) == 0 or len(fm.ts) == 0:[m
+[32m+[m[32m        return 0.0[m
+[32m+[m[32m    devo_t0_s = float(np.sort(tss_us)[0]) / 1e6[m
+[32m+[m[32m    meta_t0_s = float(fm.ts[0])[m
+[32m+[m[32m    # Si déjà même ordre de grandeur (<100 s d'écart) → pas d'offset nécessaire[m
+[32m+[m[32m    if abs(devo_t0_s - meta_t0_s) < 100.0:[m
+[32m+[m[32m        return 0.0[m
+[32m+[m[32m    offset = devo_t0_s - meta_t0_s[m
+[32m+[m[32m    print(f"[ts_offset] {os.path.basename(datapath_val)}: offset={offset:.3f}s "[m
+[32m+[m[32m          f"(DEVO t0={devo_t0_s:.3f}s, meta t0={meta_t0_s:.6f}s)")[m
+[32m+[m[32m    return offset[m
+[32m+[m
+[32m+[m
+ def make_oracle_factory(mask_root, patch_size=4, thicken_radius=0, device="cuda"):[m
+     from ms_model.oracle import OracleDynMaskProvider[m
+[31m-    cache = {}[m
+ [m
+     def factory(scene, datapath_val):[m
+         npz = _resolve_npz(scene, mask_root)[m
+         if not os.path.exists(npz):[m
+             raise FileNotFoundError(f"[M1] npz GT introuvable pour '{scene}': {npz}")[m
+[31m-        if npz not in cache:[m
+[31m-            print(f"[M1] Oracle masks <- {npz}")[m
+[31m-            cache[npz] = OracleDynMaskProvider.from_evimo_npz([m
+[31m-                npz, patch_size=patch_size, thicken_radius=thicken_radius, device=device)[m
+[31m-        return cache[npz][m
+[32m+[m[32m        offset = _ts_offset(datapath_val, npz)[m
+[32m+[m[32m        print(f"[M1] Oracle masks <- {npz}")[m
+[32m+[m[32m        return OracleDynMaskProvider.from_evimo_npz([m
+[32m+[m[32m            npz, patch_size=patch_size, thicken_radius=thicken_radius,[m
+[32m+[m[32m            device=device, ts_offset_s=offset)[m
+ [m
+     return factory[m
+ [m
+ [m
+ def make_learned_factory(mask_root, ms_weights, ms_config, threshold=None, device="cuda"):[m
+     from ms_model.oracle import LearnedDynMaskProvider[m
+[31m-    cache = {}[m
+ [m
+     def factory(scene, datapath_val):[m
+[31m-        npz = _resolve_npz(scene, mask_root)  # sert d'events + timestamps pour le modèle MS[m
+[32m+[m[32m        npz = _resolve_npz(scene, mask_root)[m
+         if not os.path.exists(npz):[m
+             raise FileNotFoundError(f"[M1] npz introuvable pour '{scene}': {npz}")[m
+[31m-        if npz not in cache:[m
+[31m-            print(f"[M1] Modèle MS -> masque appris sur {npz}")[m
+[31m-            cache[npz] = LearnedDynMaskProvider([m
+[31m-                npz_path=npz, weights_path=ms_weights, config_path=ms_config,[m
+[31m-                device=device, threshold=threshold)[m
+[31m-        return cache[npz][m
+[32m+[m[32m        offset = _ts_offset(datapath_val, npz)[m
+[32m+[m[32m        print(f"[M1] Modèle MS -> masque appris sur {npz}")[m
+[32m+[m[32m        return LearnedDynMaskProvider([m
+[32m+[m[32m            npz_path=npz, weights_path=ms_weights, config_path=ms_config,[m
+[32m+[m[32m            device=device, threshold=threshold, ts_offset_s=offset)[m
+ [m
+     return factory[m
+ [m
+[1mdiff --git a/train_coupled.py b/train_coupled.py[m
+[1mindex d78e6e2..56a3f58 100644[m
+[1m--- a/train_coupled.py[m
+[1m+++ b/train_coupled.py[m
+[36m@@ -75,9 +75,32 @@[m [mdef load_devo_weights(net, checkpoint_path):[m
+ [m
+ [m
+ def build_ms_model(ms_weights, ms_config, device):[m
+[31m-    """Charge le modèle de motion segmentation (convlstm, …) via l'API MS_Model."""[m
+[31m-    from ms_model.inference import load_model_from_checkpoint[m
+[31m-    model, data_cfg = load_model_from_checkpoint(ms_weights, ms_config, device)[m
+[32m+[m[32m    """Charge ou initialise le modèle de motion segmentation (convlstm, …).[m
+[32m+[m
+[32m+[m[32m    ms_weights=None → initialisation aléatoire (scratch training).[m
+[32m+[m[32m    """[m
+[32m+[m[32m    import yaml[m
+[32m+[m[32m    from ms_model.models import build_model[m
+[32m+[m[32m    cfg = yaml.safe_load(open(ms_config))[m
+[32m+[m[32m    data_cfg = cfg["data"][m
+[32m+[m[32m    model_cfg = dict(cfg["model"])[m
+[32m+[m[32m    model_name = model_cfg.pop("name")[m
+[32m+[m[32m    model = build_model([m
+[32m+[m[32m        model_name,[m
+[32m+[m[32m        in_channels=data_cfg["nb_time_bins"],[m
+[32m+[m[32m        patch_size=data_cfg["patch_size"],[m
+[32m+[m[32m        **model_cfg,[m
+[32m+[m[32m    ).to(device)[m
+[32m+[m[32m    if ms_weights is not None:[m
+[32m+[m[32m        import torch[m
+[32m+[m[32m        ckpt = torch.load(ms_weights, map_location=device)[m
+[32m+[m[32m        if isinstance(ckpt, dict) and "model" in ckpt:[m
+[32m+[m[32m            model.load_state_dict(ckpt["model"])[m
+[32m+[m[32m        else:[m
+[32m+[m[32m            model.load_state_dict(ckpt)[m
+[32m+[m[32m        print(f"[ms_model] poids chargés depuis {ms_weights}")[m
+[32m+[m[32m    else:[m
+[32m+[m[32m        print("[ms_model] initialisation ALÉATOIRE (scratch training)")[m
+     return model, data_cfg[m
+ [m
+ [m
+[36m@@ -238,6 +261,10 @@[m [mdef train_coupled(args):[m
+             # régularisation optionnelle : évite un masque qui sature[m
+             if args.mask_l1 > 0:[m
+                 loss = loss + args.mask_l1 * dyn_mask.mean()[m
+[32m+[m[32m            # prior doux : pénalise mask_mean trop loin de la cible (évite collapse 0 ou 1)[m
+[32m+[m[32m            if args.soft_prior_beta > 0:[m
+[32m+[m[32m                soft_prior = args.soft_prior_beta * (dyn_mask.mean() - args.soft_prior_target) ** 2[m
+[32m+[m[32m                loss = loss + soft_prior[m
+ [m
+             if torch.isnan(loss):[m
+                 print(f"[warn] nan loss @ {total_steps}, skip"); optimizer.zero_grad(); total_steps += 1; continue[m
+[36m@@ -266,7 +293,7 @@[m [mif __name__ == "__main__":[m
+     p = argparse.ArgumentParser()[m
+     # modèles[m
+     p.add_argument('--devo_weights', required=True, help='checkpoint DEVO pré-entraîné (.pth)')[m
+[31m-    p.add_argument('--ms_weights', required=True, help='checkpoint modèle MS (best.pt)')[m
+[32m+[m[32m    p.add_argument('--ms_weights', default=None, help='checkpoint modèle MS (best.pt) — None = scratch')[m
+     p.add_argument('--ms_config', required=True, help='yaml entraînement MS')[m
+     p.add_argument('--outdir', default='results_coupled/m2')[m
+     # données[m
+[36m@@ -307,6 +334,10 @@[m [mif __name__ == "__main__":[m
+     p.add_argument('--devo_lr', type=float, default=2e-5, help='lr DEVO après dégel (faible)')[m
+     p.add_argument('--clip', type=float, default=10.0)[m
+     p.add_argument('--mask_l1', type=float, default=0.0, help='régul. sparsité du masque')[m
+[32m+[m[32m    p.add_argument('--soft_prior_beta', type=float, default=0.0,[m
+[32m+[m[32m                   help='prior doux anti-collapse : β·(mask_mean − target)² (recommandé: 0.5)')[m
+[32m+[m[32m    p.add_argument('--soft_prior_target', type=float, default=0.1,[m
+[32m+[m[32m                   help='cible de mask_mean pour le prior doux (défaut: 0.1)')[m
+     p.add_argument('--pose_weight', type=float, default=10.0)[m
+     p.add_argument('--flow_weight', type=float, default=0.1)[m
+     p.add_argument('--scores_weight', type=float, default=0.05)[m

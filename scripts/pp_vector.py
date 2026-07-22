@@ -88,53 +88,16 @@ def process_seq_vector(indirs, side="left"):
             f.write(f"{q[0]} {q[1]} {q[2]} {q[3]} {q[4]} {q[5]} {q[6]} {q[7]}\n")
         f.close()
 
-        continue
-
         f = open(os.path.join(indir, f"tss_imgs_us_{side}.txt"), 'w')
         for tss in tss_imgs:
             f.write(f"{tss}\n")
         f.close()
-        # continue
 
-        imgdirout = os.path.join(indir, f"images_undistorted_{side}")
-        if not os.path.exists(imgdirout):
-            os.makedirs(imgdirout)
-        else:
-            img_list_undist = [os.path.join(imgdirout, im) for im in sorted(os.listdir(imgdirout)) if im.endswith(".png")]
-            if num_imgs == len(img_list_undist):
-                print(f"\n\nWARNING **** Images already undistorted. Skipping {indir} ***** \n\n")
-                # assert os.path.isfile(os.path.join(outdir, f"rectify_map_{side}.h5"))
-                # continue
-
-        # creating rectify map
+        # calib for events (needed by vector_evs_iterator)
         fname_evcalib = os.path.join(indir, f"../0_calib/{side}_event_camera_intrinsic_results.yaml")
-        fname_graycalib = os.path.join(indir, f"../0_calib/{side}_regular_camera_intrinsic_results.yaml")
         with open(fname_evcalib, 'r') as file:
             intr_evs = yaml.safe_load(file)
-        with open(fname_graycalib, 'r') as file:
-            intr_gray = yaml.safe_load(file)
 
-        # undist images
-        Kgraydist = np.array(intr_gray["camera_matrix"]["data"]).reshape((3, 3))
-        distcoeffs_gray = np.array(intr_gray["distortion_coefficients"]["data"]) # plumb_blob
-
-        K_new, roi = cv2.getOptimalNewCameraMatrix(Kgraydist, distcoeffs_gray, (Wgray, Hgray), alpha=0, newImgSize=(Wgray, Hgray))
-        f = open(os.path.join(indir, f"calib_undist_regular_{side}.txt"), 'w')
-        f.write(f"{K_new[0,0]} {K_new[1,1]} {K_new[0,2]} {K_new[1,2]}")
-        f.close()
-
-        img_mapx, img_mapy = cv2.initUndistortRectifyMap(Kgraydist, distcoeffs_gray, np.eye(3), K_new, (Wgray, Hgray), cv2.CV_32FC1)  
-        # undistorting images
-        pbar = tqdm.tqdm(total=num_imgs-1)
-        for i in range(num_imgs):
-            image = cv2.imread(imgin_list[i])
-            # DEBUG
-            # cv2.imwrite(os.path.join(imgdirout, f"{i:06d}_dist.png"), image) 
-            img = cv2.remap(image, img_mapx, img_mapy, cv2.INTER_CUBIC)
-            cv2.imwrite(os.path.join(imgdirout, f"{i:06d}.png"), img)
-            pbar.update(1)
-
-        # undist events
         Kevsdist = np.array(intr_evs["camera_matrix"]["data"]).reshape((3, 3))
         distcoeffs_evs = np.array(intr_evs["distortion_coefficients"]["data"])
 

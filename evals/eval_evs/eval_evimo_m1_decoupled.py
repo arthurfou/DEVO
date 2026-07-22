@@ -26,6 +26,7 @@ l'oracle GT. Compare 3 passes : vanilla / oracle (plafond) / appris (baseline).
 import os
 import argparse
 
+import numpy as np
 import torch
 from devo.config import cfg
 from utils.eval_utils import assert_eval_config
@@ -40,37 +41,63 @@ def _resolve_npz(scene, mask_root):
     return os.path.join(mask_root, cat, "npz", f"{seq}.npz")
 
 
+def _ts_offset(datapath_val, npz_path):
+    """Offset (s) à soustraire de ts_us/1e6 pour aligner avec les ts relatifs du npz.
+
+    EVIMO npz stocke meta["frames"]["ts"] en secondes relatives (0.04, 0.07, …).
+    DEVO utilise des ts_us en Unix epoch µs (~1.54e15 µs = 1.54e9 s).
+    Offset = tss_imgs_us[0]/1e6 − meta_ts[0] ≈ Unix_start_s.
+    Sans correction, searchsorted retourne toujours le dernier indice.
+    """
+    from ms_model.io.loaders import load_evimo_mask
+    tss_file = os.path.join(datapath_val, "tss_imgs_us.txt")
+    if not os.path.exists(tss_file):
+        return 0.0
+    tss_us = np.loadtxt(tss_file)
+    if tss_us.ndim == 0:
+        tss_us = np.array([float(tss_us)])
+    fm = load_evimo_mask(npz_path)
+    if len(tss_us) == 0 or len(fm.ts) == 0:
+        return 0.0
+    devo_t0_s = float(np.sort(tss_us)[0]) / 1e6
+    meta_t0_s = float(fm.ts[0])
+    # Si déjà même ordre de grandeur (<100 s d'écart) → pas d'offset nécessaire
+    if abs(devo_t0_s - meta_t0_s) < 100.0:
+        return 0.0
+    offset = devo_t0_s - meta_t0_s
+    print(f"[ts_offset] {os.path.basename(datapath_val)}: offset={offset:.3f}s "
+          f"(DEVO t0={devo_t0_s:.3f}s, meta t0={meta_t0_s:.6f}s)")
+    return offset
+
+
 def make_oracle_factory(mask_root, patch_size=4, thicken_radius=0, device="cuda"):
     from ms_model.oracle import OracleDynMaskProvider
-    cache = {}
 
     def factory(scene, datapath_val):
         npz = _resolve_npz(scene, mask_root)
         if not os.path.exists(npz):
             raise FileNotFoundError(f"[M1] npz GT introuvable pour '{scene}': {npz}")
-        if npz not in cache:
-            print(f"[M1] Oracle masks <- {npz}")
-            cache[npz] = OracleDynMaskProvider.from_evimo_npz(
-                npz, patch_size=patch_size, thicken_radius=thicken_radius, device=device)
-        return cache[npz]
+        offset = _ts_offset(datapath_val, npz)
+        print(f"[M1] Oracle masks <- {npz}")
+        return OracleDynMaskProvider.from_evimo_npz(
+            npz, patch_size=patch_size, thicken_radius=thicken_radius,
+            device=device, ts_offset_s=offset)
 
     return factory
 
 
 def make_learned_factory(mask_root, ms_weights, ms_config, threshold=None, device="cuda"):
     from ms_model.oracle import LearnedDynMaskProvider
-    cache = {}
 
     def factory(scene, datapath_val):
-        npz = _resolve_npz(scene, mask_root)  # sert d'events + timestamps pour le modèle MS
+        npz = _resolve_npz(scene, mask_root)
         if not os.path.exists(npz):
             raise FileNotFoundError(f"[M1] npz introuvable pour '{scene}': {npz}")
-        if npz not in cache:
-            print(f"[M1] Modèle MS -> masque appris sur {npz}")
-            cache[npz] = LearnedDynMaskProvider(
-                npz_path=npz, weights_path=ms_weights, config_path=ms_config,
-                device=device, threshold=threshold)
-        return cache[npz]
+        offset = _ts_offset(datapath_val, npz)
+        print(f"[M1] Modèle MS -> masque appris sur {npz}")
+        return LearnedDynMaskProvider(
+            npz_path=npz, weights_path=ms_weights, config_path=ms_config,
+            device=device, threshold=threshold, ts_offset_s=offset)
 
     return factory
 

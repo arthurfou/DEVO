@@ -13,8 +13,9 @@ from devo.plot_utils import save_trajectory_tum_format
 H, W = 260, 346
 
 @torch.no_grad()
-def evaluate(config, args, net, train_step=None, datapath="", split_file=None, 
-             trials=1, stride=1, plot=False, save=False, return_figure=False, viz=False, timing=False, viz_flow=False):
+def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
+             trials=1, stride=1, plot=False, save=False, return_figure=False, viz=False, timing=False, viz_flow=False,
+             dyn_mask_provider_factory=None):
     dataset_name = "fpv_evs"
 
     if config is None:
@@ -27,16 +28,19 @@ def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
     all_results = []
     for i, scene in enumerate(scenes):
         has_gt = "_with_gt" in scene
-        if not has_gt:            
+        if not has_gt:
             datapath_val = os.path.join(datapath, scene)
             outfolder = f"results/{scene}"
-            
+
             for trial in range(trials):
-            
+                dyn_mask_provider = None if dyn_mask_provider_factory is None \
+                    else dyn_mask_provider_factory(scene, datapath_val)
+
                 # run the slam system
-                traj_est, tstamps, flowdata = run_voxel(datapath_val, config, net, viz=viz, 
+                traj_est, tstamps, flowdata = run_voxel(datapath_val, config, net, viz=viz,
                                           iterator=fpv_evs_iterator(datapath_val, stride=stride, timing=timing, H=H, W=W, tss_gt_us=None),
-                                          timing=timing, H=H, W=W, viz_flow=viz_flow)
+                                          timing=timing, H=H, W=W, viz_flow=viz_flow,
+                                          dyn_mask_provider=dyn_mask_provider)
             
                 # save estimated trajectory
                 Path(f"{outfolder}").mkdir(exist_ok=True)
@@ -54,10 +58,14 @@ def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
                 datapath_val = os.path.join(datapath, scene)
                 tss_traj_us, traj_hf = load_gt_us(os.path.join(datapath_val, f"stamped_groundtruth_us_cam.txt"))
 
+                dyn_mask_provider = None if dyn_mask_provider_factory is None \
+                    else dyn_mask_provider_factory(scene, datapath_val)
+
                 # run the slam system
-                traj_est, tstamps, flowdata = run_voxel(datapath_val, config, net, viz=viz, 
+                traj_est, tstamps, flowdata = run_voxel(datapath_val, config, net, viz=viz,
                                             iterator=fpv_evs_iterator(datapath_val, stride=stride, timing=timing, H=H, W=W, tss_gt_us=tss_traj_us),
-                                            timing=timing, H=H, W=W, viz_flow=viz_flow)
+                                            timing=timing, H=H, W=W, viz_flow=viz_flow,
+                                            dyn_mask_provider=dyn_mask_provider)
 
 
                 # do evaluation 

@@ -11,7 +11,8 @@ H, W = 260, 346
 
 @torch.no_grad()
 def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
-             trials=1, stride=1, plot=False, save=False, return_figure=False, viz=False, timing=False, side='left', viz_flow=False, map_path=None):
+             trials=1, stride=1, plot=False, save=False, return_figure=False, viz=False, timing=False, side='left', viz_flow=False, map_path=None,
+             dyn_mask_provider_factory=None):
     dataset_name = "mvsec_evs"
     assert side == "left" or side == "right"
     assert stride == 1 # != does not work yet
@@ -32,10 +33,14 @@ def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
             # estimated trajectory
             datapath_val = os.path.join(datapath, scene)
 
+            dyn_mask_provider = None if dyn_mask_provider_factory is None \
+                else dyn_mask_provider_factory(scene, datapath_val)
+
             # run the slam system
             traj_est, tstamps, flowdata = run_voxel(datapath_val, config, net, viz=viz,
                                           iterator=mvsec_evs_iterator(datapath_val, side=side, stride=stride, timing=timing, H=H, W=W),
-                                          timing=timing, H=H, W=W, viz_flow=viz_flow, map_path=map_path)
+                                          timing=timing, H=H, W=W, viz_flow=viz_flow, map_path=map_path,
+                                          dyn_mask_provider=dyn_mask_provider)
 
             # load traj
             tss_traj_us, traj_hf = load_mvsec_traj(datapath_val)

@@ -75,9 +75,32 @@ def load_devo_weights(net, checkpoint_path):
 
 
 def build_ms_model(ms_weights, ms_config, device):
-    """Charge le modèle de motion segmentation (convlstm, …) via l'API MS_Model."""
-    from ms_model.inference import load_model_from_checkpoint
-    model, data_cfg = load_model_from_checkpoint(ms_weights, ms_config, device)
+    """Charge ou initialise le modèle de motion segmentation (convlstm, …).
+
+    ms_weights=None → initialisation aléatoire (scratch training).
+    """
+    import yaml
+    from ms_model.models import build_model
+    cfg = yaml.safe_load(open(ms_config))
+    data_cfg = cfg["data"]
+    model_cfg = dict(cfg["model"])
+    model_name = model_cfg.pop("name")
+    model = build_model(
+        model_name,
+        in_channels=data_cfg["nb_time_bins"],
+        patch_size=data_cfg["patch_size"],
+        **model_cfg,
+    ).to(device)
+    if ms_weights is not None:
+        import torch
+        ckpt = torch.load(ms_weights, map_location=device)
+        if isinstance(ckpt, dict) and "model" in ckpt:
+            model.load_state_dict(ckpt["model"])
+        else:
+            model.load_state_dict(ckpt)
+        print(f"[ms_model] poids chargés depuis {ms_weights}")
+    else:
+        print("[ms_model] initialisation ALÉATOIRE (scratch training)")
     return model, data_cfg
 
 
@@ -238,6 +261,10 @@ def train_coupled(args):
             # régularisation optionnelle : évite un masque qui sature
             if args.mask_l1 > 0:
                 loss = loss + args.mask_l1 * dyn_mask.mean()
+            # prior doux : pénalise mask_mean trop loin de la cible (évite collapse 0 ou 1)
+            if args.soft_prior_beta > 0:
+                soft_prior = args.soft_prior_beta * (dyn_mask.mean() - args.soft_prior_target) ** 2
+                loss = loss + soft_prior
 
             if torch.isnan(loss):
                 print(f"[warn] nan loss @ {total_steps}, skip"); optimizer.zero_grad(); total_steps += 1; continue
@@ -266,7 +293,7 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     # modèles
     p.add_argument('--devo_weights', required=True, help='checkpoint DEVO pré-entraîné (.pth)')
-    p.add_argument('--ms_weights', required=True, help='checkpoint modèle MS (best.pt)')
+    p.add_argument('--ms_weights', default=None, help='checkpoint modèle MS (best.pt) — None = scratch')
     p.add_argument('--ms_config', required=True, help='yaml entraînement MS')
     p.add_argument('--outdir', default='results_coupled/m2')
     # données
@@ -307,6 +334,10 @@ if __name__ == "__main__":
     p.add_argument('--devo_lr', type=float, default=2e-5, help='lr DEVO après dégel (faible)')
     p.add_argument('--clip', type=float, default=10.0)
     p.add_argument('--mask_l1', type=float, default=0.0, help='régul. sparsité du masque')
+    p.add_argument('--soft_prior_beta', type=float, default=0.0,
+                   help='prior doux anti-collapse : β·(mask_mean − target)² (recommandé: 0.5)')
+    p.add_argument('--soft_prior_target', type=float, default=0.1,
+                   help='cible de mask_mean pour le prior doux (défaut: 0.1)')
     p.add_argument('--pose_weight', type=float, default=10.0)
     p.add_argument('--flow_weight', type=float, default=0.1)
     p.add_argument('--scores_weight', type=float, default=0.05)

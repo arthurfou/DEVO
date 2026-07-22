@@ -11,7 +11,8 @@ H, W = 720, 1280
 
 @torch.no_grad()
 def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
-             stride=1, trials=1, plot=False, save=False, return_figure=False, viz=False, camID=2, timing=False, outdir=None, viz_flow=False, map_path=None):
+             stride=1, trials=1, plot=False, save=False, return_figure=False, viz=False, camID=2, timing=False, outdir=None, viz_flow=False, map_path=None,
+             dyn_mask_provider_factory=None):
     dataset_name = "tumvie_evs"
     assert camID == 2 or camID == 3
     assert H == 720 and W == 1280, "Resizing option not implemented yet (might be needed only later to train&eval quickly on TUMVIE due to large resolution)"
@@ -34,10 +35,14 @@ def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
             datapath_val = os.path.join(datapath, scene)
             traj_hf_path = os.path.join(datapath_val, "mocap_data.txt")
 
+            dyn_mask_provider = None if dyn_mask_provider_factory is None \
+                else dyn_mask_provider_factory(scene, datapath_val)
+
             # run the slam system
             traj_est, tstamps, flowdata = run_voxel(datapath_val, config, net, viz=viz,
                                           iterator=tumvie_evs_iterator(datapath_val, camID=camID, stride=stride, timing=timing, dT_ms=25, H=H, W=W),
-                                          timing=timing, H=H, W=W, viz_flow=viz_flow, map_path=map_path)
+                                          timing=timing, H=H, W=W, viz_flow=viz_flow, map_path=map_path,
+                                          dyn_mask_provider=dyn_mask_provider)
 
             # load traj
             tss_traj_us, traj_hf = load_tumvie_traj(traj_hf_path)

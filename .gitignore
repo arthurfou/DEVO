@@ -168,3 +168,6 @@ TartanAirResults
 thirdparty/*
 movies/
 TartanAirEVS.pickle
+results/
+results_coupled/
+*.npy

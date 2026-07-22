@@ -10,8 +10,9 @@ from utils.viz_utils import viz_flow_inference
 H, W = 260, 346
 
 @torch.no_grad()
-def evaluate(config, args, net, train_step=None, datapath="", split_file=None, 
-             trials=1, stride=1, plot=False, save=False, return_figure=False, viz=False, timing=False, side='left', viz_flow=False):
+def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
+             trials=1, stride=1, plot=False, save=False, return_figure=False, viz=False, timing=False, side='left', viz_flow=False,
+             dyn_mask_provider_factory=None):
     dataset_name = "hku_evs"
     assert side == "left" or side == "right"
 
@@ -31,10 +32,14 @@ def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
             # estimated trajectory
             datapath_val = os.path.join(datapath, scene)
 
+            dyn_mask_provider = None if dyn_mask_provider_factory is None \
+                else dyn_mask_provider_factory(scene, datapath_val)
+
             # run the slam system
-            traj_est, tstamps, flowdata = run_voxel(datapath_val, config, net, viz=viz, 
+            traj_est, tstamps, flowdata = run_voxel(datapath_val, config, net, viz=viz,
                                           iterator=hku_evs_iterator(datapath_val, side=side, stride=stride, timing=timing, H=H, W=W),
-                                          timing=timing, H=H, W=W, viz_flow=viz_flow)
+                                          timing=timing, H=H, W=W, viz_flow=viz_flow,
+                                          dyn_mask_provider=dyn_mask_provider)
 
             # load  traj
             tss_traj_us, traj_hf = load_gt_us(os.path.join(datapath_val, f"gt_stamped_{side}.txt"))

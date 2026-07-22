@@ -10,7 +10,8 @@ from utils.viz_utils import viz_flow_inference
 
 @torch.no_grad()
 def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
-             stride=1, trials=1, plot=False, save=False, return_figure=False, viz=False, timing=False, side='left', viz_flow=False, map_path=None):
+             stride=1, trials=1, plot=False, save=False, return_figure=False, viz=False, timing=False, side='left', viz_flow=False, map_path=None,
+             dyn_mask_provider_factory=None):
     dataset_name = "rpg_evs"
     assert side == "left" or side == "right"
 
@@ -47,10 +48,14 @@ def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
             if map_path is not None:
                 tmp_map_path = os.path.join(os.path.dirname(map_path), f"_tmp_{scene}_{trial}.ply")
 
+            dyn_mask_provider = None if dyn_mask_provider_factory is None \
+                else dyn_mask_provider_factory(scene, datapath_val)
+
             # run the slam system
             traj_est, tstamps, flowdata = run_voxel(datapath_val, config, net, viz=viz,
                                           iterator=rpg_evs_iterator(datapath_val, side=side, stride=stride, timing=timing, dT_ms=None, H=H, W=W), # optionally pass DELTA_MS
-                                          timing=timing, H=H, W=W, viz_flow=viz_flow, map_path=tmp_map_path)
+                                          timing=timing, H=H, W=W, viz_flow=viz_flow, map_path=tmp_map_path,
+                                          dyn_mask_provider=dyn_mask_provider)
 
             # load traj
             tss_traj_us, traj_hf = load_gt_us(traj_hf_path)

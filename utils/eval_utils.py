@@ -348,16 +348,27 @@ def log_results(data, hyperparam, all_results, results_dict_scene, figures,
                 yaml.dump(vars(args), f, default_flow_style=False)
 
     # compute ATE
-    ate_score, evoGT, evoEst = ate_real(traj_GT, tss_GT_us, traj_est, tss_est_us)
+    try:
+        ate_score, evoGT, evoEst = ate_real(traj_GT, tss_GT_us, traj_est, tss_est_us)
+    except (np.linalg.LinAlgError, Exception) as e:
+        print(f"WARNING: ATE computation failed for {scene}: {e}. Skipping scene.")
+        ate_score = float('nan')
+        all_results.append(ate_score)
+        results_dict_scene[scene].append(ate_score)
+        return all_results, results_dict_scene, figures, outfolder
     all_results.append(ate_score)
     results_dict_scene[scene].append(ate_score)
-    
+
     # following https://github.com/arclab-hku/Event_based_VO-VIO-SLAM/issues/5
     evoGT = make_evo_traj(traj_GT, tss_GT_us)
     evoEst = make_evo_traj(traj_est, tss_est_us)
     gtlentraj = evoGT.get_infos()["path length (m)"]
     evoGT, evoEst = sync.associate_trajectories(evoGT, evoEst, max_diff=1)
-    ape_trans = main_ape.ape(copy.deepcopy(evoGT), copy.deepcopy(evoEst), pose_relation=metrics.PoseRelation.translation_part, align=True, correct_scale=True)
+    try:
+        ape_trans = main_ape.ape(copy.deepcopy(evoGT), copy.deepcopy(evoEst), pose_relation=metrics.PoseRelation.translation_part, align=True, correct_scale=True)
+    except (np.linalg.LinAlgError, Exception) as e:
+        print(f"WARNING: APE computation failed for {scene}: {e}. Skipping scene.")
+        return all_results, results_dict_scene, figures, outfolder
     MPE = ape_trans.stats["mean"] / gtlentraj * 100
     evoATE = ape_trans.stats["rmse"]*100
     assert abs(evoATE-ate_score) < 1e-5

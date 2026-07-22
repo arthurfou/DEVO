@@ -10,8 +10,9 @@ from utils.viz_utils import viz_flow_inference
 H, W = 480, 640
 
 @torch.no_grad()
-def evaluate(config, args, net, train_step=None, datapath="", split_file=None, 
-             trials=1, stride=1, plot=False, save=False, return_figure=False, viz=False, calib1=False, timing=False, viz_flow=False):
+def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
+             trials=1, stride=1, plot=False, save=False, return_figure=False, viz=False, calib1=False, timing=False, viz_flow=False,
+             dyn_mask_provider_factory=None):
     dataset_name = "eds_evs"
 
     if config is None:
@@ -32,10 +33,14 @@ def evaluate(config, args, net, train_step=None, datapath="", split_file=None,
             datapath_val = os.path.join(datapath, scene)
             traj_hf_path = os.path.join(datapath_val, "stamped_groundtruth_us.txt")
 
+            dyn_mask_provider = None if dyn_mask_provider_factory is None \
+                else dyn_mask_provider_factory(scene, datapath_val)
+
             # run the slam system
-            traj_est, tstamps, flowdata = run_voxel(datapath_val, config, net, viz=viz, 
+            traj_est, tstamps, flowdata = run_voxel(datapath_val, config, net, viz=viz,
                                           iterator=eds_evs_iterator(datapath_val, calib1=calib1, stride=stride, timing=timing, H=H, W=W),
-                                          timing=timing, H=H, W=W, viz_flow=viz_flow)
+                                          timing=timing, H=H, W=W, viz_flow=viz_flow,
+                                          dyn_mask_provider=dyn_mask_provider)
 
             # load traj
             tss_traj_us, traj_hf = load_eds_traj(traj_hf_path)
