@@ -70,17 +70,17 @@ def preprocess_sequence(src_dir: str, out_dir: str, verbose: bool = True) -> Non
     # EVIMO2 : frame['cam']['pos']['t'] = {x,y,z}, frame['cam']['pos']['q'] = {w,x,y,z}
     gt_lines = []
     for f in frames:
-        ts = float(f["ts"])
+        ts_us = float(f["ts"]) * 1e6  # secondes → µs (attendu par load_gt_us)
         try:
             pos = f["cam"]["pos"]
             t = pos["t"]
             q = pos["q"]
             tx, ty, tz = float(t["x"]), float(t["y"]), float(t["z"])
             qx, qy, qz, qw = float(q["x"]), float(q["y"]), float(q["z"]), float(q["w"])
-            gt_lines.append(f"{ts:.9f} {tx:.9f} {ty:.9f} {tz:.9f} "
+            gt_lines.append(f"{ts_us:.3f} {tx:.9f} {ty:.9f} {tz:.9f} "
                             f"{qx:.9f} {qy:.9f} {qz:.9f} {qw:.9f}")
         except (KeyError, TypeError) as e:
-            print(f"  [warn] pose manquante pour frame ts={ts}: {e}")
+            print(f"  [warn] pose manquante pour frame ts_us={ts_us}: {e}")
 
     with open(os.path.join(out_dir, "gt_stamped.txt"), "w") as fp:
         fp.write("\n".join(gt_lines) + ("\n" if gt_lines else ""))

@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=tumvie_table
 #SBATCH --partition=gpu-long
-#SBATCH --gres=gpu:a100-40:1
+#SBATCH --gres=gpu:h100-47:1
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=64G
+#SBATCH --mem=800G
 #SBATCH --time=12:00:00
 #SBATCH --output=logs/%x_%j.log
 set -eo pipefail

@@ -3,7 +3,7 @@
 #SBATCH --partition=gpu-long
 #SBATCH --gres=gpu:a100-40:1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --time=6:00:00
 #SBATCH --output=logs/%x_%j.log
 set -eo pipefail

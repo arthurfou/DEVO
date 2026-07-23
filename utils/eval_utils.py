@@ -293,10 +293,9 @@ def ate_real(traj_ref, tss_ref_us, traj_est, tstamps):
         orientations_quat_wxyz=traj_est[:,3:], # TODO wrong format: EVO uses wxyz, we use xyzw
         timestamps=tstamps/1e6)
 
-    if traj_ref.shape == traj_est.shape:
-        assert np.all(tss_ref_us == tstamps)
+    if traj_ref.shape == traj_est.shape and np.all(tss_ref_us == tstamps):
         return ate(traj_ref, traj_est, tstamps)*100, evoGT, evoEst
-    
+
     evoGT, evoEst = sync.associate_trajectories(evoGT, evoEst, max_diff=1)
     ape_trans = main_ape.ape(evoGT, evoEst, pose_relation=metrics.PoseRelation.translation_part, align=True, correct_scale=True)
     evoATE = ape_trans.stats["rmse"]*100

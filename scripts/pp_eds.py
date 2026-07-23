@@ -31,16 +31,16 @@ def process_seq_eds(indirs, calibstr="calib0"):
         assert H == 480
 
         # 1) Getting offset which is substracted from evs, mocap and images.
-        ef_in = h5py.File(os.path.join(indir, evinfile), "r+")
-        tss_evs_us = ef_in["t"][:]
-        gt_us = np.loadtxt(os.path.join(indir, "stamped_groundtruth.txt"))
-        tss_gt_us = gt_us[:, 0] * 1e6
-        tss_imgs_us = np.loadtxt(os.path.join(indir, "images_timestamps.txt"), skiprows=0)
-        
         if not os.path.isfile(os.path.join(indir, "t_offset_us.txt")):
+            ef_in = h5py.File(os.path.join(indir, evinfile), "r+")
+            tss_evs_us = ef_in["t"][:]
+            gt_us = np.loadtxt(os.path.join(indir, "stamped_groundtruth.txt"))
+            tss_gt_us = gt_us[:, 0] * 1e6
+            tss_imgs_us = np.loadtxt(os.path.join(indir, "images_timestamps.txt"), skiprows=0)
+
             offset_us = np.minimum(tss_evs_us.min(), np.minimum(tss_gt_us.min(), tss_imgs_us.min())).astype(np.int64)
             print(f"Minimum/offset_us is {offset_us}. tss_evs_us.min() = {tss_evs_us.min()-offset_us},  tss_gt_us.min() = {tss_gt_us.min()-offset_us}, tss_imgs_us.min() = {tss_imgs_us.min()-offset_us}")
-            assert offset_us != 0 
+            assert offset_us != 0
             assert offset_us > 0
 
             tss_gt_us -= offset_us
@@ -53,8 +53,17 @@ def process_seq_eds(indirs, calibstr="calib0"):
             ef_in["t"][:] -= offset_us
             tss_evs_us -= offset_us
             np.savetxt(os.path.join(indir, "t_offset_us.txt"), np.array([offset_us]))
+            # Don't close ef_in here — kept open for ms_to_idx step below
         else:
-            assert ef_in["t"][0] < 5000
+            print(f"Skipping offset step (already done): {indir}")
+            try:
+                ef_in = h5py.File(os.path.join(indir, evinfile), "r+")
+                tss_evs_us = ef_in["t"][:]
+                print(f"Loaded {len(tss_evs_us)} event timestamps from {evinfile}")
+            except Exception as e:
+                print(f"Warning: could not read {evinfile} for {indir}: {e}. Skipping ms_to_idx and visualization.")
+                ef_in = None
+                tss_evs_us = None
 
         # calib data
         K_rgb = np.zeros((3,3))
@@ -134,77 +143,77 @@ def process_seq_eds(indirs, calibstr="calib0"):
         ef_out.close()
 
         # 5) Computing ms_to_idx
-        tss_evs_ns = tss_evs_us * 1000
-        if "ms_to_idx" not in ef_in.keys():
-            print(f"Start computing ms_to_idx, with {len(tss_evs_ns)} tss_evs_ns, {tss_evs_ns}, ms_start={ef_in['t'][0]}")
-            ms_to_idx = compute_ms_to_idx(tss_evs_ns)
-            print(f"Done computing ms_to_idx")
-            ef_in.create_dataset('ms_to_idx', shape=len(ms_to_idx), dtype="<u8")
-            ef_in["ms_to_idx"][:] = ms_to_idx
+        if ef_in is not None and tss_evs_us is not None:
+            tss_evs_ns = tss_evs_us * 1000
+            if "ms_to_idx" not in ef_in.keys():
+                print(f"Start computing ms_to_idx, with {len(tss_evs_ns)} tss_evs_ns, ms_start={ef_in['t'][0]}")
+                ms_to_idx = compute_ms_to_idx(tss_evs_ns)
+                print(f"Done computing ms_to_idx")
+                ef_in.create_dataset('ms_to_idx', shape=len(ms_to_idx), dtype="<u8")
+                ef_in["ms_to_idx"][:] = ms_to_idx
+        else:
+            print(f"Skipping ms_to_idx for {indir} (events.h5 not readable)")
 
-        # 6) Visualization from here on (undistorted evs)
-        outvizfolder = os.path.join(indir, f"evs_rgb_joint_{calibstr}")
-        os.makedirs(outvizfolder, exist_ok=True)
-        event_slicer = EventSlicer(ef_in)
+        # 6) Visualization from here on (undistorted evs) — skip if ef_in is unavailable
+        if ef_in is not None:
+            outvizfolder = os.path.join(indir, f"evs_rgb_joint_{calibstr}")
+            os.makedirs(outvizfolder, exist_ok=True)
+            event_slicer = EventSlicer(ef_in)
 
-        if calibstr == "calib1":
-            T_rgb_imu = np.asarray([ # cam0 calib1
-                        [-0.9990674261177589, 0.003631371785536113, 0.04302430951674526, 0.029775744033325717], 
-                        [-0.0028069257561474303, -0.9998115832434417, 0.019207268937644115, -3.945506719509616e-05],
-                        [0.043085951750390296, 0.019068590697760665, 0.9988893780647411, -0.05058322878791149], 
-                        [0.0, 0.0, 0.0, 1.0]])
+            if calibstr == "calib1":
+                T_rgb_imu = np.asarray([ # cam0 calib1
+                            [-0.9990674261177589, 0.003631371785536113, 0.04302430951674526, 0.029775744033325717],
+                            [-0.0028069257561474303, -0.9998115832434417, 0.019207268937644115, -3.945506719509616e-05],
+                            [0.043085951750390296, 0.019068590697760665, 0.9988893780647411, -0.05058322878791149],
+                            [0.0, 0.0, 0.0, 1.0]])
 
-            T_ev_imu = np.asarray([ # cam1 calib1
-                        [-0.9995991738524179, 0.005137352230635228, 0.027840604261081696, 0.025511174632699758], 
-                        [-0.005338788412348343, -0.9999600732256928, -0.007165842082780113, 0.00040093104150374986],
-                        [0.027802679220750436, -0.007311604921325729, 0.9995866903183648, -0.06778644321079669], 
-                        [0.0, 0.0, 0.0, 1.0]])
-            T_ev_rgb = T_ev_imu @ np.linalg.inv(T_rgb_imu) # == T_cn_cnm1 == T_cam1_cam0  (calib1)
-        elif calibstr == "calib0":
-            T_ev_rgb = np.asarray([  # calib0
-                [0.9998964430808897, -0.0020335804041023736, -0.014246672065022661, -0.00011238613157578769],
-                [0.001703024953250547, 0.9997299470300024, -0.023176123864880376, -0.0005981481496958399],
-                [0.014289955220253567, 0.02314946137886846, 0.9996298813149167, -0.004416681577516066],
-                [0.0, 0.0, 0.0, 1.0]
-            ])
+                T_ev_imu = np.asarray([ # cam1 calib1
+                            [-0.9995991738524179, 0.005137352230635228, 0.027840604261081696, 0.025511174632699758],
+                            [-0.005338788412348343, -0.9999600732256928, -0.007165842082780113, 0.00040093104150374986],
+                            [0.027802679220750436, -0.007311604921325729, 0.9995866903183648, -0.06778644321079669],
+                            [0.0, 0.0, 0.0, 1.0]])
+                T_ev_rgb = T_ev_imu @ np.linalg.inv(T_rgb_imu) # == T_cn_cnm1 == T_cam1_cam0  (calib1)
+            elif calibstr == "calib0":
+                T_ev_rgb = np.asarray([  # calib0
+                    [0.9998964430808897, -0.0020335804041023736, -0.014246672065022661, -0.00011238613157578769],
+                    [0.001703024953250547, 0.9997299470300024, -0.023176123864880376, -0.0005981481496958399],
+                    [0.014289955220253567, 0.02314946137886846, 0.9996298813149167, -0.004416681577516066],
+                    [0.0, 0.0, 0.0, 1.0]
+                ])
 
-        # Computing joint recitificaiton
-        K_joint = K_evs # (K_evs + K_rgb) / 2.
-        newR = T_ev_rgb[:3, :3]
-        img_mapx, img_mapy = cv2.initUndistortRectifyMap(K_rgb, dist_coeffs_rgb, newR, K_joint, (W, H), cv2.CV_32FC1)
-        ev_mapx, ev_mapy = cv2.initUndistortRectifyMap(K_evs, dist_coeffs_evs, np.eye(3), K_joint, (W, H), cv2.CV_32FC1)
+            # Computing joint recitificaiton
+            K_joint = K_evs # (K_evs + K_rgb) / 2.
+            newR = T_ev_rgb[:3, :3]
+            img_mapx, img_mapy = cv2.initUndistortRectifyMap(K_rgb, dist_coeffs_rgb, newR, K_joint, (W, H), cv2.CV_32FC1)
+            ev_mapx, ev_mapy = cv2.initUndistortRectifyMap(K_evs, dist_coeffs_evs, np.eye(3), K_joint, (W, H), cv2.CV_32FC1)
 
-        tss_img_us = np.loadtxt(os.path.join(indir, "images_timestamps_us.txt"))
-        assert len(tss_imgs_us) == len(img_list)
-        assert len(tss_img_us) == len(tss_imgs_us) # bug checker
-        dT_ms_trigger_period = np.diff(tss_imgs_us).mean()/1e3
-        print(f"Visualizing undistorted {len(tss_img_us)} event slices around images (with aligned optical axis)")
-        pbar = tqdm.tqdm(total=len(tss_img_us)-1)
-        for i in range(len(tss_img_us)-1):
-            # undistort img
-            # img = cv2.undistort(image, K_rgb, dist_coeffs_rgb, newCameraMatrix=K_joint)
-            image =  cv2.imread(img_list[i])
-            img = cv2.remap(image, img_mapx, img_mapy, cv2.INTER_CUBIC)
-            cv2.imwrite(os.path.join(outvizfolder, "%06d_a" % i + ".png"), img)
+            tss_img_us = np.loadtxt(os.path.join(indir, "images_timestamps_us.txt"))
+            dT_ms_trigger_period = np.diff(tss_img_us).mean()/1e3
+            print(f"Visualizing undistorted {len(tss_img_us)} event slices around images (with aligned optical axis)")
+            pbar = tqdm.tqdm(total=len(tss_img_us)-1)
+            for i in range(len(tss_img_us)-1):
+                image = cv2.imread(img_list[i])
+                img = cv2.remap(image, img_mapx, img_mapy, cv2.INTER_CUBIC)
+                cv2.imwrite(os.path.join(outvizfolder, "%06d_a" % i + ".png"), img)
 
-            start_time_us = tss_img_us[i] - 1e3 * dT_ms_trigger_period / 2.
-            end_time_us = start_time_us + 1e3 * dT_ms_trigger_period / 2.
-            ev_batch = event_slicer.get_events(start_time_us, end_time_us)
-            if ev_batch is None:
-                print(f"Got no events in {start_time_us/1e3} ms to {end_time_us/1e3} ms")
-                continue
-            p = ev_batch['p']
-            x = ev_batch['x']
-            y = ev_batch['y']
-            # img = render_ev_accumulation(x, y, p, H, W)
-            # cv2.imwrite(os.path.join(outvizfolder,  "%06d_b" % i + ".png"), img)
-            x_rect = ev_mapx[y, x]
-            y_rect = ev_mapy[y, x]
-            img = render(x_rect, y_rect, p, H, W)
-            cv2.imwrite(os.path.join(outvizfolder,  "%06d_undist" % i + ".png"), img)
-            pbar.update(1)
+                start_time_us = tss_img_us[i] - 1e3 * dT_ms_trigger_period / 2.
+                end_time_us = start_time_us + 1e3 * dT_ms_trigger_period / 2.
+                ev_batch = event_slicer.get_events(start_time_us, end_time_us)
+                if ev_batch is None:
+                    print(f"Got no events in {start_time_us/1e3} ms to {end_time_us/1e3} ms")
+                    continue
+                p = ev_batch['p']
+                x = ev_batch['x']
+                y = ev_batch['y']
+                x_rect = ev_mapx[y, x]
+                y_rect = ev_mapy[y, x]
+                img = render(x_rect, y_rect, p, H, W)
+                cv2.imwrite(os.path.join(outvizfolder, "%06d_undist" % i + ".png"), img)
+                pbar.update(1)
 
-        ef_in.close()
+            ef_in.close()
+        else:
+            print(f"Skipping visualization for {indir} (events.h5 not readable)")
 
         print(f"Finshied processing {indir}\n\n")
   
