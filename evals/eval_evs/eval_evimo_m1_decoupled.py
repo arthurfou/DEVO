@@ -16,9 +16,9 @@ l'oracle GT. Compare 3 passes : vanilla / oracle (plafond) / appris (baseline).
         --datapath <eval_EVIMO_preprocessé> \
         --weights DEVO.pth \
         --val_split splits/evimo/evimo_val.txt \
-        --mask_root /home/arthur/IPAL/arthur_ipal/datasets/evimo_full/eval \
-        --ms_weights /home/arthur/IPAL/arthur_ipal/MS_Model/checkpoints/v4-full-run1/best.pt \
-        --ms_config  /home/arthur/IPAL/arthur_ipal/MS_Model/configs/convlstm_v4_full.yaml \
+        --mask_root /chemin/vers/evimo_full/eval \
+        --ms_weights ../MS_Model/checkpoints/v4-full-run1/best.pt \
+        --ms_config  ../MS_Model/configs/convlstm_v4_full.yaml \
         --threshold 0.5
 
 `ms_model` doit être installé dans l'env (`pip install -e MS_Model`).

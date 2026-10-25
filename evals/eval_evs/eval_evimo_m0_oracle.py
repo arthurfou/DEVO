@@ -16,7 +16,7 @@ Le masque oracle vient de la segmentation GT EVIMO (npz `mask`+`meta`), sous-éc
         --datapath /chemin/vers/evimo/eval \
         --weights DEVO.pth \
         --val_split splits/evimo/evimo_val.txt \
-        --mask_root /home/arthur/IPAL/arthur_ipal/datasets/evimo_full/eval \
+        --mask_root /chemin/vers/evimo_full/eval \
         --thicken_radius 2
 
 `ms_model` doit être installé dans l'env (`pip install -e MS_Model`).
